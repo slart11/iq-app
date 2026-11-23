@@ -4,49 +4,157 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Trøndelag Kartquiz · IQ-app</title>
-  <meta name="description" content="Finn kommunene i Trøndelag på kartet.">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            background: "#ffffff",
-            foreground: "#0f172a",
-            "muted-foreground": "#475569",
-            secondary: "#f1f5f9",
-            border: "#e2e8f0",
-            primary: "#0f172a",
-            "primary-foreground": "#ffffff",
-            destructive: "#b91c1c",
-            "destructive-foreground": "#ffffff"
-          }
-        }
-      }
-    };
-  </script>
-  <style>
-    #quiz-map { background: #f8fafc; }
-    button:disabled { opacity: .5; }
-    @keyframes shake {
-      25% { transform: translateX(-5px); }
-      50% { transform: translateX(5px); }
-      75% { transform: translateX(-5px); }
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      .animate-shake { animation: shake .35s ease-in-out; }
-    }
-  </style>
-  <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script defer src="./kartquiz.js"></script>
+  <meta name="description" content="Finn alle 38 kommunene i Trøndelag på kartet.">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <link rel="stylesheet" href="./styles/shared.css">
+  <link rel="stylesheet" href="./styles/geografi.css">
+  <script
+    defer
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script type="module" src="./js/geo-app.js"></script>
 </head>
 <body>
-  <div id="quiz">
-    <p class="p-4"><a class="underline" href="./">← Forside</a> · Laster kartquizen …</p>
+  <div class="geo-shell">
+    <header class="geo-header">
+      <div class="geo-header-top">
+        <nav class="nav-links" aria-label="Hovedmeny">
+          <a class="nav-link" href="./">← Forside</a>
+          <a class="nav-link" href="./matte.html">Matte</a>
+          <a class="nav-link nav-link-geo" href="./geografi.html" aria-current="page">Geografi</a>
+        </nav>
+
+        <div class="geo-toolbar">
+          <div class="geo-stats" aria-label="Poengoversikt">
+            <div class="geo-stat">
+              <span class="geo-stat-label">Riktige</span>
+              <span id="stat-score" class="geo-stat-value geo-stat-success">0</span>
+            </div>
+            <div class="geo-stat">
+              <span class="geo-stat-label">Feil</span>
+              <span id="stat-failed" class="geo-stat-value geo-stat-danger">0</span>
+            </div>
+            <div class="geo-stat">
+              <span class="geo-stat-label">Igjen</span>
+              <span id="stat-remaining" class="geo-stat-value">38</span>
+            </div>
+          </div>
+
+          <div class="geo-actions">
+            <button id="btn-hint" type="button" class="btn btn-secondary geo-btn-compact" disabled>
+              <span aria-hidden="true">💡</span>
+              <span>Hint</span>
+            </button>
+            <button id="btn-giveup" type="button" class="btn btn-danger-soft geo-btn-compact" disabled>
+              Gi opp
+            </button>
+            <button id="btn-restart" type="button" class="btn btn-primary-geo geo-btn-compact" disabled>
+              Start på nytt
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="geo-prompt-bar">
+        <div class="geo-question-wrap">
+          <h1 class="sr-only">Trøndelag Kartquiz</h1>
+          <div id="geo-question" class="geo-question">
+            <span class="geo-question-prefix">Hvor ligger </span>
+            <span id="geo-target-name" class="geo-target-name">…</span>
+            <span class="geo-question-prefix">?</span>
+          </div>
+          <div id="geo-attempts" class="geo-attempts" aria-label="Forsøk igjen">
+            <span class="attempt-dot" data-attempt="1"></span>
+            <span class="attempt-dot" data-attempt="2"></span>
+            <span class="attempt-dot" data-attempt="3"></span>
+          </div>
+        </div>
+
+        <div id="geo-feedback" class="geo-feedback geo-feedback-idle" role="status" aria-live="polite">
+          Laster kartdata for Trøndelag …
+        </div>
+      </div>
+
+      <div
+        id="geo-progress"
+        class="geo-progress"
+        role="progressbar"
+        aria-label="Fremdrift i kartquizen"
+        aria-valuemin="0"
+        aria-valuemax="38"
+        aria-valuenow="0"
+      >
+        <div id="geo-progress-fill" class="geo-progress-fill"></div>
+      </div>
+    </header>
+
+    <main class="geo-stage">
+      <div
+        id="quiz-map"
+        class="geo-map"
+        role="application"
+        aria-label="Interaktivt kart over kommunene i Trøndelag"
+      ></div>
+
+      <div class="geo-map-controls" role="group" aria-label="Kartkontroller">
+        <button id="btn-zoom-in" type="button" class="btn btn-secondary geo-map-btn" aria-label="Zoom inn" title="Zoom inn">
+          +
+        </button>
+        <button id="btn-zoom-out" type="button" class="btn btn-secondary geo-map-btn" aria-label="Zoom ut" title="Zoom ut">
+          −
+        </button>
+        <button id="btn-zoom-reset" type="button" class="btn btn-secondary geo-map-btn geo-map-btn-reset" aria-label="Tilbakestill kartutsnitt" title="Tilbakestill kartutsnitt">
+          Tilbakestill
+        </button>
+      </div>
+
+      <button id="btn-show-summary" type="button" class="btn btn-primary-geo geo-floating-summary" hidden>
+        Vis resultat
+      </button>
+
+      <div id="geo-loading" class="geo-overlay" role="status" aria-live="polite">
+        <div class="geo-overlay-card">
+          <div class="geo-spinner" aria-hidden="true"></div>
+          <p class="geo-overlay-text">Laster kart over Trøndelag …</p>
+        </div>
+      </div>
+
+      <div id="geo-error" class="geo-overlay" role="alert" hidden>
+        <div class="geo-overlay-card">
+          <h2 class="geo-overlay-title">Kunne ikke laste kartet</h2>
+          <p id="geo-error-message" class="geo-overlay-text">Noe gikk galt ved henting av kommunedata.</p>
+          <button id="btn-retry" type="button" class="btn btn-primary-geo">
+            Prøv igjen
+          </button>
+        </div>
+      </div>
+
+      <div id="geo-summary-backdrop" class="geo-summary-backdrop" hidden>
+        <section
+          id="geo-summary"
+          class="geo-summary-card"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="summary-title"
+          tabindex="-1"
+        >
+          <div id="geo-summary-content" class="geo-summary-content"></div>
+        </section>
+      </div>
+    </main>
   </div>
-  <noscript>Du må slå på JavaScript for å spille kartquizen.</noscript>
+
+  <noscript>
+    <div class="geo-noscript">
+      Du må slå på JavaScript for å spille Trøndelag Kartquiz. <a href="./">Tilbake til forsiden</a>
+    </div>
+  </noscript>
 </body>
 </html>
