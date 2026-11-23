@@ -419,6 +419,8 @@ export class PenguinArena {
       targetIndex: null,
       targetX: null,
       runTime: 0,
+      isBackingUp: false,
+      backStepTime: 0,
       breathCycleTime: 0.85, // starts near first inhale peak so user sees breathing immediately
       breathStreamTimer: 0,
       isExhaling: false,
@@ -1105,6 +1107,7 @@ export class PenguinArena {
     }
 
     const { landed, airborne } = this._findActiveDropTarget();
+    bear.isBackingUp = false;
 
     if (bear.mode === 'wait') {
       // Polar bear stands still waiting (does NOT patrol back and forth!)
@@ -1137,12 +1140,33 @@ export class PenguinArena {
 
         const distFromFocus = Math.abs(focus.x - bear.x);
         if (distFromFocus < BEAR_CHOMP_DIST - 4) {
-          // Back up smoothly while watching the falling penguin
+          // Back up smoothly with a backward walking animation while watching the falling penguin
           const delta = idealX - bear.x;
           if (Math.abs(delta) > 2) {
             const step = Math.min(Math.abs(delta), BEAR_BACK_SPEED * dt);
             bear.x = clamp(bear.x + Math.sign(delta) * step, BEAR_MIN_X, BEAR_MAX_X);
-            bear.runTime += dt;
+            bear.isBackingUp = true;
+            bear.backStepTime += dt;
+
+            // Snow dust puffs & pawprints as the bear steps backward
+            bear.dustTimer -= dt;
+            if (bear.dustTimer <= 0) {
+              this._spawnSnowBurst(bear.x + bear.dir * 14, BEAR_FLOOR_Y, 3);
+              bear.dustTimer = 0.12;
+            }
+            bear.pawprintCooldown -= dt;
+            if (bear.pawprintCooldown <= 0) {
+              bear.pawSide = 1 - bear.pawSide;
+              this._pawprints.push({
+                x: Math.round(bear.x + bear.dir * 10),
+                y: BEAR_FLOOR_Y + 2 + bear.pawSide * 3,
+                life: 10,
+              });
+              if (this._pawprints.length > 32) {
+                this._pawprints.shift();
+              }
+              bear.pawprintCooldown = 0.13;
+            }
           }
         }
 
@@ -1168,6 +1192,10 @@ export class PenguinArena {
       const deltaToIdeal = idealX - bear.x;
       const distToIdeal = Math.abs(deltaToIdeal);
       const isBackingUp = (deltaToIdeal * bear.dir) < 0;
+      bear.isBackingUp = isBackingUp && distToIdeal > 3;
+      if (bear.isBackingUp) {
+        bear.backStepTime += dt;
+      }
 
       // Keep facing the penguin while either galloping forward OR backing up!
       if (Math.abs(target.x - bear.x) > 4) {
@@ -1591,7 +1619,11 @@ export class PenguinArena {
     let cellIndex = 0; // 0 = idle, 1 = gallop stride 1, 2 = gallop bound 2, 3 = chomp/roar
     let yOffset = 0;
 
-    if (b.mode === 'sprint') {
+    if (b.isBackingUp) {
+      // Stepping backward while keeping eyes on the penguin: uses custom articulated backward-walk cycle on Cell 0
+      cellIndex = 0;
+      yOffset = 0;
+    } else if (b.mode === 'sprint') {
       // Alternates between Cell 1 (sx = 56) and Cell 2 (sx = 112) every 95ms, with -4px vertical hop on Cell 2
       const stridePhase = Math.floor(b.runTime / 0.095) % 2;
       if (stridePhase === 0) {
@@ -1631,7 +1663,46 @@ export class PenguinArena {
         ctx.scale(-1, 1);
       }
 
-      if (cellIndex === 0 && (b.mode === 'wait' || b.mode === 'watch')) {
+      if (b.isBackingUp) {
+        // Articulated Backward-Walk Cycle (4-beat alternating rear & front leg stepping on Cell 0):
+        // The bear stays facing the penguin while its hind legs and front legs alternate lifting & stepping back!
+        const walkPhase = (b.backStepTime || 0) * Math.PI * 5.5;
+        const backSwing = Math.sin(walkPhase);
+        const frontSwing = Math.sin(walkPhase + Math.PI);
+
+        // Rear legs (x = 0..54 in Cell 0, sy = 50..80) lift & step back on opposite beat to front legs
+        const rearLiftY = -Math.round(Math.max(0, backSwing) * 4);
+        const rearStepX = Math.round(backSwing * 3);
+
+        // Front legs (x = 54..110 in Cell 0, sy = 50..80) lift & step back on alternating beat
+        const frontLiftY = -Math.round(Math.max(0, frontSwing) * 4);
+        const frontStepX = Math.round(frontSwing * 3);
+
+        // Subtle body bob & slight backward weight-shift lean
+        const bodyBobY = -Math.round(Math.abs(Math.sin(walkPhase)) * 2);
+        const halfW = Math.round(BEAR_DRAW_W / 2);
+
+        // 1. Rear legs (sx = 0..54, sy = 50..80)
+        ctx.drawImage(
+          bImg,
+          sx, 50, 54, 30,
+          -halfW + rearStepX, 50 + rearLiftY, 54, 30
+        );
+
+        // 2. Front legs (sx = 54..110, sy = 50..80)
+        ctx.drawImage(
+          bImg,
+          sx + 54, 50, BEAR_CELL_W - 54, 30,
+          -halfW + 54 + frontStepX, 50 + frontLiftY, BEAR_CELL_W - 54, 30
+        );
+
+        // 3. Upper torso, back & head (sy = 0..54, 54px) with gentle walking bob & slight lean back
+        ctx.drawImage(
+          bImg,
+          sx, 0, BEAR_CELL_W, 54,
+          -halfW - 1, bodyBobY, BEAR_DRAW_W, 54
+        );
+      } else if (cellIndex === 0 && (b.mode === 'wait' || b.mode === 'watch')) {
         // 3-Slice Synchronized Breathing Animation on 110×80 bear (paws stay 100% planted on snow floor!):
         const ph = b.breathPhase || 0;
         let inhaleAmount = 0; // 0..1
