@@ -21,50 +21,50 @@ const STYLE_ID = 'iq-penguin-arena-styles-canva-16bit';
 const W = 396;
 const H = 224;
 
-const BRIDGE_Y = 91; // Penguin feet level on top of the timber & ice bridge deck
-const FLOOR_Y = 194; // Snow floor level inside ISHULEN where falling penguins land
-const BEAR_FLOOR_Y = 198; // Polar bear paw contact level on the snowy cave floor
+const BRIDGE_Y = 78; // Penguin feet level on top of the elevated timber & ice bridge deck (less wasted sky above!)
+const FLOOR_Y = 197; // Snow floor level inside ISHULEN where falling penguins land
+const BEAR_FLOOR_Y = 201; // Polar bear paw contact level on the snowy cave floor
 const GRAVITY = 520; // px/s² in 396×224 space
-const BEAR_HOME_X = 88;
+const BEAR_HOME_X = 94;
 const BEAR_SPEED = 240; // px/s gallop sprint speed across the snow floor
-const SLOT_L = 58;
-const SLOT_R = 338;
+const SLOT_L = 42;
+const SLOT_R = 354;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=3',
-  bear: './assets/canva-bear.png?v=3',
-  penguin: './assets/canva-penguin.png?v=3',
+  bg: './assets/canva-bg.png?v=4',
+  bear: './assets/canva-bear.png?v=4',
+  penguin: './assets/canva-penguin.png?v=4',
 };
 
-const BEAR_CELL_W = 76;
-const BEAR_CELL_H = 56;
-const BEAR_DRAW_W = 76;
-const BEAR_DRAW_H = 56;
+const BEAR_CELL_W = 110;
+const BEAR_CELL_H = 80;
+const BEAR_DRAW_W = 110;
+const BEAR_DRAW_H = 80;
 
-const PENGUIN_CELL_W = 32;
-const PENGUIN_CELL_H = 34;
-const PENGUIN_DRAW_W = 32;
-const PENGUIN_DRAW_H = 34;
+const PENGUIN_CELL_W = 40;
+const PENGUIN_CELL_H = 46;
+const PENGUIN_DRAW_W = 40;
+const PENGUIN_DRAW_H = 46;
 
-// Bridge lantern coordinates in 396×224 space
+// Bridge lantern coordinates in 396×224 space (shifted up with cropped top sky)
 const BRIDGE_LANTERNS = [
-  { x: 20, y: 66 },
-  { x: 376, y: 66 },
+  { x: 20, y: 52 },
+  { x: 376, y: 52 },
 ];
 
 // Cave wall torch coordinates in 396×224 space
 const CAVE_TORCHES = [
-  { x: 33, y: 132 },
-  { x: 318, y: 148 },
-  { x: 364, y: 132 },
+  { x: 33, y: 126 },
+  { x: 318, y: 144 },
+  { x: 364, y: 126 },
 ];
 
 // Glowing cyan crystal clusters in 396×224 space
 const CAVE_CRYSTALS = [
-  { x: 55, y: 165 },
-  { x: 32, y: 182 },
-  { x: 350, y: 175 },
-  { x: 376, y: 182 },
+  { x: 55, y: 162 },
+  { x: 32, y: 180 },
+  { x: 350, y: 173 },
+  { x: 376, y: 180 },
 ];
 
 /* ==========================================================================
@@ -823,9 +823,9 @@ export class PenguinArena {
   /** @private */
   _spawnBreath(heavy = false) {
     const b = this._bear;
-    // Exact mouth/snout coordinates on the 76×56 Cell 0 bear sprite
-    const mouthX = b.x + b.dir * 27;
-    const mouthY = BEAR_FLOOR_Y - 42;
+    // Exact mouth/snout coordinates on the large 110×80 Cell 0 bear sprite
+    const mouthX = b.x + b.dir * 39;
+    const mouthY = BEAR_FLOOR_Y - 60;
     const count = heavy ? 2 : 1;
     for (let i = 0; i < count; i += 1) {
       const spread = (Math.random() - 0.5) * 3;
@@ -1107,7 +1107,7 @@ export class PenguinArena {
         bear.mode = 'wait';
         return;
       }
-      const stopDist = 28;
+      const stopDist = 38;
       const dx = target.x - bear.x;
       const dist = Math.abs(dx);
       bear.dir = dx >= 0 ? 1 : -1;
@@ -1255,11 +1255,18 @@ export class PenguinArena {
   _drawBackgroundAndAtmosphere(ctx, t) {
     const bgImg = this._sprites.bg;
     if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-      ctx.drawImage(bgImg, 0, 0, W, H);
+      // Crop the top 7px of empty dark sky from canva-bg.png (198×112) so the bridge sits higher (BRIDGE_Y = 78),
+      // eliminating wasted air above the penguins and giving the cavern below more room for the large polar bear!
+      const cropTopSy = 7;
+      const bridgeSy = 46;
+      // Top section (sky, moon, mountains, bridge top): sy = 7..46 (39px) -> dy = 0..78 (78px = exact 2x vertical scale!)
+      ctx.drawImage(bgImg, 0, cropTopSy, 198, bridgeSy - cropTopSy, 0, 0, W, 78);
+      // Lower section (bridge deck + cavern + snow floor): sy = 46..112 (66px) -> dy = 78..224 (146px)
+      ctx.drawImage(bgImg, 0, bridgeSy, 198, 112 - bridgeSy, 0, 78, W, H - 78);
     } else {
       // Instant first-millisecond dark blue fallback before image decode finishes
-      fillRectPx(ctx, 0, 0, W, 92, PAL.skyFallback);
-      fillRectPx(ctx, 0, 92, W, H - 92, PAL.caveGap);
+      fillRectPx(ctx, 0, 0, W, 78, PAL.skyFallback);
+      fillRectPx(ctx, 0, 78, W, H - 78, PAL.caveGap);
     }
 
     // Soft flickering warm golden glow pulses over the 2 bridge lanterns
@@ -1299,12 +1306,12 @@ export class PenguinArena {
       const d = this._trapdoors[i];
       if (d.angle <= 5) continue;
 
-      const gapX = Math.round(d.slotX - 10);
-      const gapY = 91;
-      const gapW = 20;
-      const gapH = 8;
+      const gapX = Math.round(d.slotX - 12);
+      const gapY = 78;
+      const gapW = 24;
+      const gapH = 9;
 
-      // Dark cavern gap cut flush inside the timber bridge beam at (slotX - 10, 91)
+      // Dark cavern gap cut flush inside the timber bridge beam at (slotX - 12, 78)
       fillRectPx(ctx, gapX, gapY, gapW, gapH, '#122238');
       fillRectPx(ctx, gapX, gapY, gapW, 1, PAL.oakDark);
 
@@ -1454,8 +1461,8 @@ export class PenguinArena {
     const drawX = Math.round(b.x);
     const drawY = BEAR_FLOOR_Y + yOffset;
 
-    // Soft dark contact shadow (54 × 8 px) under the polar bear's paws
-    fillEllipsePx(ctx, drawX, BEAR_FLOOR_Y + 1, 27, 4, 'rgba(10, 18, 35, 0.5)');
+    // Soft dark contact shadow (76 × 10 px) under the large polar bear's paws
+    fillEllipsePx(ctx, drawX, BEAR_FLOOR_Y + 1, 38, 5, 'rgba(10, 18, 35, 0.5)');
 
     if (bImg && bImg.complete && bImg.naturalWidth > 0) {
       const sx = cellIndex * BEAR_CELL_W;
@@ -1466,10 +1473,7 @@ export class PenguinArena {
       }
 
       if (cellIndex === 0 && (b.mode === 'wait' || b.mode === 'watch')) {
-        // 3-Slice Synchronized Breathing Animation (paws stay 100% planted on snow floor!):
-        // Phase 0.00..0.42 = Inhale (chest & head swell up -2px, chest expands +1px forward)
-        // Phase 0.42..0.70 = Exhale (chest compresses back down while snout pushes +1px forward blowing icy frost!)
-        // Phase 0.70..1.00 = Calm rest
+        // 3-Slice Synchronized Breathing Animation on 110×80 bear (paws stay 100% planted on snow floor!):
         const ph = b.breathPhase || 0;
         let inhaleAmount = 0; // 0..1
         let exhalePush = 0;   // 0..1
@@ -1483,30 +1487,30 @@ export class PenguinArena {
 
         const chestLiftY = -Math.round(inhaleAmount * 2);     // 0 to -2px upward chest heave
         const chestExpandX = Math.round(inhaleAmount * 1);    // 0 to +1px chest expansion
-        const headLiftY = -Math.round(inhaleAmount * 2) + Math.round(exhalePush * 1); // rises on inhale, dips slightly on exhale
-        const headForwardX = Math.round(exhalePush * 1);      // pushes +1px forward while blowing frost breath!
+        const headLiftY = -Math.round(inhaleAmount * 2) + Math.round(exhalePush * 1);
+        const headForwardX = Math.round(exhalePush * 1);
 
         const halfW = Math.round(BEAR_DRAW_W / 2);
 
-        // Slice 1 (Bottom legs & paws: sy = 38..56) — 100% stationary planted on snow floor!
+        // Slice 1 (Bottom legs & paws: sy = 54..80, 26px) — 100% stationary planted on snow floor!
         ctx.drawImage(
           bImg,
-          sx, 38, BEAR_CELL_W, 18,
-          -halfW, 38, BEAR_DRAW_W, 18
+          sx, 54, BEAR_CELL_W, 26,
+          -halfW, 54, BEAR_DRAW_W, 26
         );
 
-        // Slice 2 (Mid ribcage, belly & shoulder hump: sy = 18..39) — heaves up & expands on inhale!
+        // Slice 2 (Mid ribcage, belly & shoulder hump: sy = 26..55, 29px) — heaves up & expands on inhale!
         ctx.drawImage(
           bImg,
-          sx, 18, BEAR_CELL_W, 21,
-          -halfW, 18 + chestLiftY, BEAR_DRAW_W + chestExpandX, 21 - chestLiftY
+          sx, 26, BEAR_CELL_W, 29,
+          -halfW, 26 + chestLiftY, BEAR_DRAW_W + chestExpandX, 29 - chestLiftY
         );
 
-        // Slice 3 (Upper shoulder, neck, head & snout: sy = 0..19) — rises on inhale, pushes forward on icy exhale!
+        // Slice 3 (Upper shoulder, neck, head & snout: sy = 0..27, 27px) — rises on inhale, pushes forward on exhale!
         ctx.drawImage(
           bImg,
-          sx, 0, BEAR_CELL_W, 19,
-          -halfW + headForwardX, headLiftY, BEAR_DRAW_W, 19
+          sx, 0, BEAR_CELL_W, 27,
+          -halfW + headForwardX, headLiftY, BEAR_DRAW_W, 27
         );
       } else {
         ctx.drawImage(
