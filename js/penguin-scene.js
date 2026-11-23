@@ -1,30 +1,42 @@
 /**
- * Penguin Ramp & Hungry Polar Bear Ice Cave — HD 2D Retina Canvas Animation Engine.
+ * Penguin Ice Bridge & Hungry Polar Bear Ice Cave — hi-bit pixel-art engine.
  *
- * Logical coordinate system: 800 × 360 with automatic devicePixelRatio scaling,
- * smooth anti-aliasing, anatomically rendered Emperor penguins & 4-limb articulated
- * polar bear, and cached procedural Arctic backdrop for silky 60 FPS performance.
+ * Everything is rasterised by a tiny software renderer into a 480 × 216 framebuffer
+ * (Uint32Array) using a fixed ~55-colour arctic palette, ordered Bayer 4×4 dithering,
+ * palette-constrained lighting maps (moonlight, lantern warmth, crystal glow, fog,
+ * shadow), and procedurally shaded sprites (per-pixel normals → 5–7 tone ramps,
+ * selective outlines, moon rim light + teal crystal bounce light).
+ * The framebuffer is blitted to a low-res canvas and upscaled with nearest-neighbour.
  *
  * Pure state helpers (`createPenguinState`, `dropOnePenguin`, `celebratePenguins`)
- * have zero DOM/window dependencies and can be imported directly in Node.js unit tests.
+ * have zero DOM/window dependencies and can be imported directly in Node.js tests.
  */
 
-const STYLE_ID = 'iq-penguin-arena-styles';
-const CANVAS_W = 800;
-const CANVAS_H = 360;
-const RAMP_Y = 142;
-const RAMP_H = 20;
-const CAVE_TOP = RAMP_Y + RAMP_H; // 162
-const FLOOR_Y = 318;
-const GRAVITY = 880; // px/s^2 in 800×360 logical space
-const BEAR_HOME_X = 145;
+const STYLE_ID = 'iq-penguin-arena-styles-px';
+const W = 480;
+const H = 216;
+const SCALE = 3;
+const SNOW_Y = 84; // bridge snow surface (penguin feet)
+const BLOCK_Y = 88; // top of the ice block course
+const DECK_BOTTOM = 98; // underside of the bridge
+const FLOOR_Y = 192; // cave snow floor (bear paws / landed penguins)
+const GRAVITY = 540; // px/s² in 480×216 space
+const BEAR_HOME_X = 104;
+const BRIDGE_L = 40;
+const BRIDGE_R = 440;
+const SLOT_L = 66;
+const SLOT_R = 414;
+const LANTERNS = [
+  { x: 37, y: 60, post: 24, arm: 1 },
+  { x: 443, y: 60, post: 454, arm: -1 },
+];
 
 /* ==========================================================================
    Pure State Helpers (Zero DOM Dependencies)
    ========================================================================== */
 
 /**
- * Creates the initial pure state for the penguin ramp arena.
+ * Creates the initial pure state for the penguin ice bridge arena.
  * @param {number} [totalPenguins=10]
  */
 export function createPenguinState(totalPenguins = 10) {
@@ -43,7 +55,7 @@ export function createPenguinState(totalPenguins = 10) {
 }
 
 /**
- * Returns a new state with one penguin dropped from the ramp to the hungry polar bear.
+ * Returns a new state with one penguin dropped through a trapdoor to the polar bear.
  * If no penguins remain, returns an unchanged copy of the state.
  * @param {{ total: number, remaining: number, eaten: number, fallingIndex: number | null, bearState: string, bearSlot: number }} state
  */
@@ -74,8 +86,88 @@ export function celebratePenguins(state) {
 }
 
 /* ==========================================================================
-   Math & Geometry Helpers
+   Palette, Dithering & Noise
    ========================================================================== */
+
+const PAL_HEX = [
+  '#05060f', '#0a0e1f', '#0f1630', '#152043', '#1c2b56', '#263a6b', '#335080', '#456b9a', // 0-7 night / deep ice
+  '#5a86b0', '#78a4c8', '#9cc4de', '#c4e0ef', '#e6f4fb', '#ffffff', //                         8-13 ice & snow
+  '#0e3b4a', '#13606a', '#1f8f8a', '#3cc7b0', '#8ff5dc', //                                    14-18 crystal teal
+  '#1d6b4a', '#2fa36b', '#6fe39a', '#5b3d8f', '#8a63c9', //                                    19-23 aurora
+  '#3a1f14', '#6b3a1e', '#a8622a', '#e09a3e', '#ffd27a', '#fff2c4', //                         24-29 lantern warmth
+  '#2a1c16', '#4a3226', '#6e4c35', '#2b2f3a', '#4b5262', '#7a8394', //                         30-35 timber & iron
+  '#3b4660', '#56637e', '#7a879c', '#a3adb9', '#c9cdc8', '#e4e0cf', '#f6f0dc', //              36-42 bear fur
+  '#0b0d14', '#1b2230', '#2c3a52', '#44597a', //                                               43-46 penguin black/slate
+  '#b8641e', '#f0a020', '#ffd84a', '#fff2a8', //                                               47-50 penguin gold
+  '#5a1a2a', '#a33a52', '#e07a8a', '#c0283a', //                                               51-54 mouth / red
+];
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+const PAL_RGB = PAL_HEX.map(hexToRgb);
+// Little-endian RGBA packed into Uint32 (ImageData byte order R,G,B,A).
+const P = PAL_RGB.map(([r, g, b]) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0);
+
+function nearestIndex(r, g, b) {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < PAL_RGB.length; i += 1) {
+    const c = PAL_RGB[i];
+    const dr = (c[0] - r) * 0.30;
+    const dg = (c[1] - g) * 0.59;
+    const db = (c[2] - b) * 0.11;
+    const d = dr * dr + dg * dg + db * db;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/** Builds a palette → palette colour remap (keeps every pixel inside the fixed palette). */
+function buildMap(fn) {
+  const map = new Map();
+  for (let i = 0; i < PAL_RGB.length; i += 1) {
+    const [r, g, b] = fn(PAL_RGB[i]);
+    let j = nearestIndex(r, g, b);
+    if (j === i) {
+      // Nudge harder so the map always visibly shifts the tone.
+      const [r2, g2, b2] = fn(fn(PAL_RGB[i]));
+      j = nearestIndex(r2, g2, b2);
+    }
+    map.set(P[i], P[j]);
+  }
+  return map;
+}
+
+function blendTo(target, k) {
+  return (c) => [c[0] + (target[0] - c[0]) * k, c[1] + (target[1] - c[1]) * k, c[2] + (target[2] - c[2]) * k];
+}
+
+const MAP_WARM = buildMap(blendTo([255, 178, 84], 0.42));
+const MAP_MOON = buildMap(blendTo([200, 230, 255], 0.3));
+const MAP_TEAL = buildMap(blendTo([70, 240, 210], 0.36));
+const MAP_FOG = buildMap(blendTo([150, 190, 226], 0.34));
+const MAP_DARK = buildMap((c) => [c[0] * 0.55, c[1] * 0.58, c[2] * 0.68]);
+
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+function bay(x, y) {
+  return BAYER[((y & 3) << 2) | (x & 3)];
+}
+
+/** Picks a ramp tone for value v∈[0,1] with ordered dithering between neighbours. */
+function tone(ramp, v, x, y) {
+  const n = ramp.length - 1;
+  let i = Math.floor(v * n + (bay(x, y) + 0.5) / 16);
+  if (i < 0) i = 0;
+  else if (i > n) i = n;
+  return ramp[i];
+}
 
 function clamp(v, min, max) {
   return v < min ? min : v > max ? max : v;
@@ -85,39 +177,48 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-/**
- * Deterministic pseudo-random helper for stars, snowflakes, and procedural details.
- */
 function seededRand(seed) {
   const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453123;
   return s - Math.floor(s);
 }
 
-/**
- * Computes evenly distributed X coordinates across the 800px wide ramp for `total` slots.
- */
+function hash2(x, y) {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul((y | 0) + 1013, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function vnoise(x) {
+  const i = Math.floor(x);
+  const f = x - i;
+  const u = f * f * (3 - 2 * f);
+  return lerp(seededRand(i), seededRand(i + 1), u);
+}
+
+function vnoise2(x, y) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const fx = x - xi;
+  const fy = y - yi;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fy * fy * (3 - 2 * fy);
+  const a = lerp(hash2(xi, yi), hash2(xi + 1, yi), u);
+  const b = lerp(hash2(xi, yi + 1), hash2(xi + 1, yi + 1), u);
+  return lerp(a, b, v);
+}
+
 function getSlotX(index, total) {
-  if (total <= 1) {
-    return 400;
-  }
-  const left = 92;
-  const right = 708;
-  const step = (right - left) / (total - 1);
-  return Math.round(left + index * step);
+  if (total <= 1) return 240;
+  const step = (SLOT_R - SLOT_L) / (total - 1);
+  return Math.round(SLOT_L + index * step);
 }
 
-/**
- * Computes trapdoor width that fits neatly under each penguin slot.
- */
 function getTrapdoorWidth(total) {
-  if (total <= 1) return 52;
-  const step = (708 - 92) / (total - 1);
-  return Math.max(34, Math.min(48, Math.floor(step - 14)));
+  if (total <= 1) return 26;
+  const step = (SLOT_R - SLOT_L) / (total - 1);
+  return clamp(Math.floor(step - 10), 16, 26);
 }
 
-/**
- * Checks whether the user prefers reduced motion.
- */
 function prefersReducedMotion() {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return false;
@@ -125,9 +226,6 @@ function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-/**
- * Injects scoped CSS once into the document head.
- */
 function ensureArenaStyles() {
   if (typeof document === 'undefined') return;
   if (document.getElementById(STYLE_ID)) return;
@@ -141,19 +239,19 @@ function ensureArenaStyles() {
   border-radius: 1.125rem;
   overflow: hidden;
   border: 2px solid #1e3a5f;
-  background: #040b18;
+  background: #05060f;
   box-shadow: 0 12px 32px rgba(4, 11, 24, 0.42);
 }
-
 .penguin-arena-canvas {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 800 / 360;
+  aspect-ratio: 480 / 216;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
   user-select: none;
-  background: #040b18;
+  background: #05060f;
 }
-
 .penguin-status-bar {
   display: flex;
   flex-wrap: wrap;
@@ -167,7 +265,6 @@ function ensureArenaStyles() {
   font-weight: 600;
   border-top: 1px solid #1e293b;
 }
-
 .penguin-status-pill {
   display: inline-flex;
   align-items: center;
@@ -178,12 +275,10 @@ function ensureArenaStyles() {
   color: #e0f2fe;
   font-variant-numeric: tabular-nums;
 }
-
 .penguin-status-pill[data-danger="true"] {
   background: #7f1d1d;
   color: #fee2e2;
 }
-
 .penguin-status-note {
   color: #cbd5e1;
   font-weight: 500;
@@ -194,26 +289,1040 @@ function ensureArenaStyles() {
   document.head.appendChild(style);
 }
 
-/**
- * Helper to trace a rounded rectangle path cleanly across all browsers.
- */
-function traceRoundedRect(ctx, x, y, w, h, r) {
-  const rad = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + rad, y);
-  ctx.lineTo(x + w - rad, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
-  ctx.lineTo(x + w, y + h - rad);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
-  ctx.lineTo(x + rad, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
-  ctx.lineTo(x, y + rad);
-  ctx.quadraticCurveTo(x, y, x + rad, y);
-  ctx.closePath();
+/* ==========================================================================
+   Framebuffer primitives
+   ========================================================================== */
+
+function px(buf, x, y, c) {
+  x |= 0;
+  y |= 0;
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  buf[y * W + x] = c;
+}
+
+function mapPx(buf, x, y, map) {
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  const i = y * W + x;
+  const c = map.get(buf[i]);
+  if (c !== undefined) buf[i] = c;
+}
+
+/** Dithered radial palette remap (glows, light pools, shadows). */
+function mapRadial(buf, cx, cy, rx, ry, density, map, power = 2) {
+  const x0 = Math.max(0, Math.floor(cx - rx));
+  const x1 = Math.min(W - 1, Math.ceil(cx + rx));
+  const y0 = Math.max(0, Math.floor(cy - ry));
+  const y1 = Math.min(H - 1, Math.ceil(cy + ry));
+  for (let y = y0; y <= y1; y += 1) {
+    const dy = (y + 0.5 - cy) / ry;
+    for (let x = x0; x <= x1; x += 1) {
+      const dx = (x + 0.5 - cx) / rx;
+      const d = dx * dx + dy * dy;
+      if (d >= 1) continue;
+      const t = 1 - Math.sqrt(d);
+      const k = (power === 1 ? t : t * t) * density;
+      if (bay(x, y) < k * 16) {
+        const i = y * W + x;
+        const c = map.get(buf[i]);
+        if (c !== undefined) buf[i] = c;
+      }
+    }
+  }
 }
 
 /* ==========================================================================
-   PenguinArena HD Retina 2D Canvas Controller (800 × 360)
+   Pixel font (5×7) for speech badges
+   ========================================================================== */
+
+const GLYPHS = {
+  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
+  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
+  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
+  G: ['01110', '10001', '10000', '10111', '10001', '10001', '01111'],
+  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
+  '!': ['1', '1', '1', '1', '1', '0', '1'],
+};
+
+/** Draws outlined, drop-shadowed pixel text centred on (cx, cy) at integer scale s. */
+function drawBadge(buf, text, cx, cy, s, fillTop, fillBot, border, outline, shadow) {
+  let gw = 0;
+  for (const ch of text) gw += (GLYPHS[ch] ? GLYPHS[ch][0].length : 3) + 1;
+  gw -= 1;
+  const pad = 3;
+  const mw = gw * s + pad * 2 + 1;
+  const mh = 7 * s + pad * 2 + 1;
+  const m = new Uint8Array(mw * mh);
+  let ox = pad;
+  for (const ch of text) {
+    const g = GLYPHS[ch];
+    if (!g) {
+      ox += 4 * s;
+      continue;
+    }
+    for (let gy = 0; gy < 7; gy += 1) {
+      for (let gx = 0; gx < g[gy].length; gx += 1) {
+        if (g[gy][gx] !== '1') continue;
+        for (let sy = 0; sy < s; sy += 1) {
+          for (let sx = 0; sx < s; sx += 1) {
+            m[(pad + gy * s + sy) * mw + ox + gx * s + sx] = 1;
+          }
+        }
+      }
+    }
+    ox += (g[0].length + 1) * s;
+  }
+  const dilate = (src, from, val) => {
+    for (let y = 1; y < mh - 1; y += 1) {
+      for (let x = 1; x < mw - 1; x += 1) {
+        const i = y * mw + x;
+        if (src[i]) continue;
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const v = src[i + dy * mw + dx];
+            if (v && v <= from) {
+              src[i] = val;
+              dy = 2;
+              break;
+            }
+          }
+        }
+      }
+    }
+  };
+  dilate(m, 1, 2);
+  dilate(m, 2, 3);
+  const X = Math.round(cx - mw / 2);
+  const Y = Math.round(cy - mh / 2);
+  for (let y = 0; y < mh; y += 1) {
+    for (let x = 0; x < mw; x += 1) {
+      if (m[y * mw + x]) px(buf, X + x + 1, Y + y + 1, shadow);
+    }
+  }
+  const split = pad + Math.floor(7 * s * 0.45);
+  for (let y = 0; y < mh; y += 1) {
+    for (let x = 0; x < mw; x += 1) {
+      const v = m[y * mw + x];
+      if (!v) continue;
+      const c = v === 3 ? outline : v === 2 ? border : y < split ? fillTop : fillBot;
+      px(buf, X + x, Y + y, c);
+    }
+  }
+}
+
+/* ==========================================================================
+   Procedural shaded sprite rasteriser
+   ========================================================================== */
+
+const MAT = [];
+function defMat(id, ramp, ol, olLit, rim, rim2, tex, dith) {
+  MAT[id] = {
+    ramp: ramp.map((i) => P[i]),
+    ol: P[ol],
+    olLit: P[olLit],
+    rim: rim >= 0 ? P[rim] : 0,
+    rim2: rim2 >= 0 ? P[rim2] : 0,
+    tex,
+    dith,
+  };
+}
+const M_FUR = 1;
+const M_NOSE = 2;
+const M_MOUTH = 3;
+const M_TEETH = 4;
+const M_TONGUE = 5;
+const M_EYE = 6;
+const M_CLAW = 7;
+const M_PBLACK = 8;
+const M_PSLATE = 9;
+const M_PWHITE = 10;
+const M_PGOLD = 11;
+const M_PCREAM = 12;
+const M_PBEAK = 13;
+const M_PORANGE = 14;
+const M_PFEET = 15;
+const M_CATCH = 16;
+const M_PEYE = 17;
+defMat(M_FUR, [36, 37, 38, 39, 40, 41, 42], 3, 37, 13, 16, 0.16, 1);
+defMat(M_NOSE, [43, 44, 33, 35], 3, 36, 35, -1, 0, 0.5);
+defMat(M_MOUTH, [51, 52, 53], 3, 36, -1, -1, 0, 0.6);
+defMat(M_TEETH, [12, 13], 3, 36, -1, -1, 0, 0);
+defMat(M_TONGUE, [52, 53], 51, 52, -1, -1, 0, 0.4);
+defMat(M_EYE, [43], 43, 43, -1, -1, 0, 0);
+defMat(M_CLAW, [43, 44], 43, 43, -1, -1, 0, 0);
+defMat(M_PBLACK, [43, 43, 44, 45, 46], 43, 44, 7, -1, 0.05, 0.7);
+defMat(M_PSLATE, [43, 44, 45, 46, 7], 43, 44, 8, -1, 0.08, 0.8);
+defMat(M_PWHITE, [8, 9, 10, 11, 12, 13], 43, 45, 13, -1, 0.03, 0.8);
+defMat(M_PGOLD, [47, 48, 49, 50], 43, 44, 50, -1, 0, 0.6);
+defMat(M_PCREAM, [48, 49, 50, 12], 43, 44, 13, -1, 0, 0.7);
+defMat(M_PBEAK, [43, 44, 45], 43, 43, 46, -1, 0, 0);
+defMat(M_PORANGE, [47, 48, 27], 43, 43, -1, -1, 0, 0);
+defMat(M_PFEET, [43, 44, 33], 43, 43, -1, -1, 0, 0.5);
+defMat(M_CATCH, [13], 43, 43, -1, -1, 0, 0);
+defMat(M_PEYE, [44], 43, 43, -1, -1, 0, 0);
+
+const LIGHT = (() => {
+  const l = [0.55, -0.62, 0.56];
+  const n = Math.hypot(l[0], l[1], l[2]);
+  return [l[0] / n, l[1] / n, l[2] / n];
+})();
+
+class Sprite {
+  constructor(w, h, ox, oy) {
+    this.w = w;
+    this.h = h;
+    this.ox = ox;
+    this.oy = oy;
+    this.mat = new Uint8Array(w * h);
+    this.sh = new Float32Array(w * h);
+    this.m = [1, 0, 0, 1, ox, oy];
+    this.stack = [];
+    this.lx = LIGHT[0];
+    this._tx = 0;
+    this._ty = 0;
+  }
+
+  begin(facing) {
+    this.mat.fill(0);
+    this.m = [1, 0, 0, 1, this.ox, this.oy];
+    this.stack.length = 0;
+    this.lx = LIGHT[0] * (facing < 0 ? -1 : 1);
+  }
+
+  save() {
+    this.stack.push(this.m.slice());
+  }
+
+  restore() {
+    this.m = this.stack.pop();
+  }
+
+  translate(x, y) {
+    const m = this.m;
+    m[4] += m[0] * x + m[2] * y;
+    m[5] += m[1] * x + m[3] * y;
+  }
+
+  rotate(a) {
+    if (!a) return;
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    const m = this.m;
+    const a0 = m[0];
+    const b0 = m[1];
+    const c0 = m[2];
+    const d0 = m[3];
+    m[0] = a0 * c + c0 * s;
+    m[1] = b0 * c + d0 * s;
+    m[2] = -a0 * s + c0 * c;
+    m[3] = -b0 * s + d0 * c;
+  }
+
+  scale(k) {
+    const m = this.m;
+    m[0] *= k;
+    m[1] *= k;
+    m[2] *= k;
+    m[3] *= k;
+  }
+
+  rotateAbout(x, y, a) {
+    this.translate(x, y);
+    this.rotate(a);
+    this.translate(-x, -y);
+  }
+
+  _tp(x, y) {
+    const m = this.m;
+    this._tx = m[0] * x + m[2] * y + m[4];
+    this._ty = m[1] * x + m[3] * y + m[5];
+  }
+
+  _put(x, y, id, nx, ny, nz, bias, flat) {
+    const i = y * this.w + x;
+    let s;
+    if (flat >= 0) {
+      s = flat;
+    } else {
+      const d = nx * this.lx + ny * LIGHT[1] + nz * LIGHT[2];
+      s = 0.26 + 0.74 * (d > 0 ? d : 0) + bias;
+      const tex = MAT[id].tex;
+      if (tex) s += tex * (hash2(x >> 1, (y + (x >> 2)) >> 1) - 0.5);
+    }
+    this.mat[i] = id;
+    this.sh[i] = s;
+  }
+
+  ellipse(cx, cy, rx, ry, ang, id, bias = 0, flat = -1) {
+    const m = this.m;
+    this._tp(cx, cy);
+    const wx = this._tx;
+    const wy = this._ty;
+    const k = Math.hypot(m[0], m[1]);
+    rx *= k;
+    ry *= k;
+    if (rx < 0.4 || ry < 0.4) return;
+    const A = ang + Math.atan2(m[1], m[0]);
+    const ca = Math.cos(A);
+    const sa = Math.sin(A);
+    const R = Math.max(rx, ry) + 1;
+    const x0 = Math.max(0, Math.floor(wx - R));
+    const x1 = Math.min(this.w - 1, Math.ceil(wx + R));
+    const y0 = Math.max(0, Math.floor(wy - R));
+    const y1 = Math.min(this.h - 1, Math.ceil(wy + R));
+    for (let y = y0; y <= y1; y += 1) {
+      const dy = y + 0.5 - wy;
+      for (let x = x0; x <= x1; x += 1) {
+        const dx = x + 0.5 - wx;
+        const u = (dx * ca + dy * sa) / rx;
+        const v = (-dx * sa + dy * ca) / ry;
+        const q = u * u + v * v;
+        if (q > 1) continue;
+        const nz = Math.sqrt(1 - q);
+        this._put(x, y, id, u * ca - v * sa, u * sa + v * ca, nz, bias, flat);
+      }
+    }
+  }
+
+  capsule(x1, y1, r1, x2, y2, r2, id, bias = 0, flat = -1) {
+    const m = this.m;
+    const k = Math.hypot(m[0], m[1]);
+    this._tp(x1, y1);
+    const ax = this._tx;
+    const ay = this._ty;
+    this._tp(x2, y2);
+    const bx = this._tx;
+    const by = this._ty;
+    r1 = r1 * k + 0.2;
+    r2 = r2 * k + 0.2;
+    const R = Math.max(r1, r2) + 1;
+    const x0 = Math.max(0, Math.floor(Math.min(ax, bx) - R));
+    const xe = Math.min(this.w - 1, Math.ceil(Math.max(ax, bx) + R));
+    const y0 = Math.max(0, Math.floor(Math.min(ay, by) - R));
+    const ye = Math.min(this.h - 1, Math.ceil(Math.max(ay, by) + R));
+    const abx = bx - ax;
+    const aby = by - ay;
+    const L2 = abx * abx + aby * aby || 1e-6;
+    for (let y = y0; y <= ye; y += 1) {
+      const py = y + 0.5;
+      for (let x = x0; x <= xe; x += 1) {
+        const pxx = x + 0.5;
+        let t = ((pxx - ax) * abx + (py - ay) * aby) / L2;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const dx = pxx - (ax + abx * t);
+        const dy = py - (ay + aby * t);
+        const r = r1 + (r2 - r1) * t;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > r * r) continue;
+        const nz = Math.sqrt(Math.max(0, 1 - d2 / (r * r)));
+        this._put(x, y, id, dx / r, dy / r, nz, bias, flat);
+      }
+    }
+  }
+
+  dot(x, y, id, shade = 0.5) {
+    this._tp(x, y);
+    const bx = Math.floor(this._tx);
+    const by = Math.floor(this._ty);
+    if (bx < 0 || by < 0 || bx >= this.w || by >= this.h) return;
+    this._put(bx, by, id, 0, 0, 1, 0, shade);
+  }
+
+  _at(x, y) {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return 0;
+    return this.mat[y * this.w + x];
+  }
+
+  /** Resolves materials → palette, adds rim light + selective outline, blits to framebuffer. */
+  resolve(buf, worldX, worldY, flip, opts = {}) {
+    const { w, h } = this;
+    const X = flip ? worldX - (w - 1 - this.ox) : worldX - this.ox;
+    const Y = worldY - this.oy;
+    const lsx = this.lx >= 0 ? 1 : -1;
+    const flash = !!opts.flash;
+    const rim2 = !!opts.rim2;
+    for (let by = 0; by < h; by += 1) {
+      const ty = Y + by;
+      if (ty < 0 || ty >= H) continue;
+      for (let bx = 0; bx < w; bx += 1) {
+        const tx = flip ? X + (w - 1 - bx) : X + bx;
+        if (tx < 0 || tx >= W) continue;
+        const i = by * w + bx;
+        const id = this.mat[i];
+        if (id) {
+          const M = MAT[id];
+          let c;
+          if (flash) {
+            c = P[13];
+          } else if (M.rim && this._at(bx + lsx, by - 1) === 0) {
+            c = M.rim;
+          } else if (rim2 && M.rim2 && this._at(bx - lsx, by) === 0 && this.sh[i] < 0.62) {
+            c = M.rim2;
+          } else {
+            const ramp = M.ramp;
+            const n = ramp.length - 1;
+            let k = Math.floor(this.sh[i] * n + 0.5 + ((bay(bx, by) + 0.5) / 16 - 0.5) * M.dith);
+            if (k < 0) k = 0;
+            else if (k > n) k = n;
+            c = ramp[k];
+          }
+          buf[ty * W + tx] = c;
+        } else {
+          const below = this._at(bx, by + 1);
+          const nb = below || this._at(bx - 1, by) || this._at(bx + 1, by) || this._at(bx, by - 1);
+          if (!nb) continue;
+          const M2 = MAT[nb];
+          buf[ty * W + tx] = flash ? P[12] : below && !this._at(bx, by - 1) ? M2.olLit : M2.ol;
+        }
+      }
+    }
+  }
+}
+
+/* ==========================================================================
+   Static layer builders (sky, moon, glaciers, cave, floor, crystals, foreground)
+   ========================================================================== */
+
+const CRYSTAL_CLUSTERS = [
+  { gx: 60, gy: 184, gr: 28, phase: 0.2, list: [[60, 194, 19, 3.3, 0.32], [53, 195, 12, 2.6, -0.28], [67, 194, 11, 2.3, 0.82], [48, 196, 7, 2, -0.75]] },
+  { gx: 420, gy: 184, gr: 28, phase: 2.1, list: [[419, 194, 21, 3.5, -0.3], [427, 195, 12, 2.6, 0.36], [411, 195, 9, 2.2, -0.85], [433, 196, 7, 2, 0.78]] },
+  { gx: 52, gy: 142, gr: 20, phase: 1.1, list: [[43, 143, 12, 2.4, 1.2], [44, 149, 9, 2, 1.62], [43, 138, 7, 1.8, 0.9]] },
+  { gx: 428, gy: 128, gr: 20, phase: 3.3, list: [[437, 129, 13, 2.6, -1.2], [436, 135, 9, 2, -1.58], [437, 124, 7, 1.7, -0.86]] },
+  { gx: 246, gy: 184, gr: 15, phase: 4.2, list: [[246, 191, 10, 2.1, 0.12], [240, 192, 6, 1.6, -0.45], [252, 192, 6, 1.6, 0.55]] },
+];
+
+function cliffLeftEdge(y) {
+  return 46 + (vnoise(y * 0.13 + 2) - 0.5) * 10 + (vnoise(y * 0.37 + 9) - 0.5) * 5 - Math.max(0, y - 165) * 0.2;
+}
+
+function cliffRightEdge(y) {
+  return 434 - (vnoise(y * 0.12 + 31) - 0.5) * 10 - (vnoise(y * 0.41 + 17) - 0.5) * 5 + Math.max(0, y - 165) * 0.2;
+}
+
+function floorSurface(x) {
+  let fs = FLOOR_Y - 1 + Math.round(1.6 * vnoise(x * 0.05 + 1) + 1.3 * vnoise(x * 0.13 + 8) - 1.2);
+  if (x < 74) fs -= Math.round((74 - x) * 0.32);
+  if (x > 406) fs -= Math.round((x - 406) * 0.32);
+  return fs;
+}
+
+function ridgeY(x, base, amp, freq, seed) {
+  let r = 0;
+  let a = 1;
+  let f = freq;
+  let tot = 0;
+  for (let o = 0; o < 4; o += 1) {
+    const n = vnoise(x * f + seed + o * 17.3);
+    r += a * (1 - Math.abs(2 * n - 1));
+    tot += a;
+    a *= 0.5;
+    f *= 2.13;
+  }
+  r /= tot;
+  return base - amp * r * r;
+}
+
+function drawCrystal(buf, x0, y0, len, hw, ang) {
+  const dx = Math.sin(ang);
+  const dy = -Math.cos(ang);
+  const qx = Math.cos(ang);
+  const qy = Math.sin(ang);
+  const R = len + hw + 2;
+  for (let y = Math.floor(y0 - R); y <= Math.ceil(y0 + R); y += 1) {
+    for (let x = Math.floor(x0 - R); x <= Math.ceil(x0 + R); x += 1) {
+      const rx = x + 0.5 - x0;
+      const ry = y + 0.5 - y0;
+      const u = rx * dx + ry * dy;
+      const v = rx * qx + ry * qy;
+      if (u < 0 || u > len) continue;
+      const taper = u < len * 0.68 ? hw : (hw * (len - u)) / (len * 0.32);
+      if (Math.abs(v) > taper + 0.15) continue;
+      let c;
+      const edge = Math.abs(v) > taper - 0.9;
+      if (u < 1.5) c = P[14];
+      else if (Math.abs(v) < Math.max(0.5, taper * 0.2)) c = u > len * 0.55 ? P[13] : P[18];
+      else if (v < 0) c = edge ? P[14] : u > len * 0.6 ? P[16] : P[15];
+      else c = edge ? P[18] : u > len * 0.5 ? P[17] : P[16];
+      px(buf, x, y, c);
+    }
+  }
+}
+
+function buildStaticLayers() {
+  const bg = new Uint32Array(W * H);
+  const mask = new Uint8Array(W * H); // 1 = open sky (stars & aurora may draw)
+
+  // 1. Night sky gradient (dithered) with a faint horizon glow toward the moon.
+  const SKY = [P[1], P[2], P[3], P[4], P[5], P[6]];
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      const t = Math.min(1, y / 118);
+      const glow = 0.12 * Math.exp(-(((x - 330) / 180) ** 2)) * t;
+      bg[y * W + x] = tone(SKY, Math.pow(t, 1.2) * 0.92 + glow, x, y);
+      mask[y * W + x] = 1;
+    }
+  }
+
+  // 2. Moon: halo, limb-darkened disc, maria and craters.
+  const MX = 404;
+  const MY = 27;
+  const MR = 13;
+  for (let y = MY - 48; y <= MY + 48; y += 1) {
+    for (let x = MX - 48; x <= MX + 48; x += 1) {
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      const d = Math.hypot(x + 0.5 - MX, y + 0.5 - MY);
+      if (d <= MR || d >= 48) continue;
+      const t = 1 - (d - MR) / (48 - MR);
+      if (bay(x, y) < t * t * 0.8 * 16) mapPx(bg, x, y, MAP_MOON);
+      if (d < MR + 5 && bay(x, y) < 11) mapPx(bg, x, y, MAP_MOON);
+    }
+  }
+  const MOON = [P[7], P[8], P[9], P[10], P[11], P[12], P[13]];
+  const craters = [[-4, -3, 3.2], [3, 4, 2.4], [5, -5, 1.8], [-6, 5, 1.6], [1, -1, 1.3], [-1, 8, 1.5], [8, 1, 1.4]];
+  for (let y = MY - MR; y <= MY + MR; y += 1) {
+    for (let x = MX - MR; x <= MX + MR; x += 1) {
+      const nx = (x + 0.5 - MX) / MR;
+      const ny = (y + 0.5 - MY) / MR;
+      const q = nx * nx + ny * ny;
+      if (q > 1) continue;
+      const nz = Math.sqrt(1 - q);
+      const dif = Math.max(0, -0.38 * nx - 0.32 * ny + 0.87 * nz);
+      let v = 0.18 + 0.82 * dif;
+      if (vnoise2((x - MX) * 0.22 + 3, (y - MY) * 0.22 + 7) > 0.6) v -= 0.17;
+      for (const [cx, cy, cr] of craters) {
+        const ddx = x + 0.5 - (MX + cx);
+        const ddy = y + 0.5 - (MY + cy);
+        const dd = Math.hypot(ddx, ddy);
+        if (dd < cr) {
+          v -= 0.1;
+          if (dd > cr - 1.1) v += (ddx + ddy) / dd > 0 ? 0.24 : -0.12;
+        }
+      }
+      bg[y * W + x] = tone(MOON, v, x, y);
+      mask[y * W + x] = 2;
+    }
+  }
+
+  // 3. Three layers of jagged glacier mountains with moonlit facets and haze.
+  const layers = [
+    { base: 68, amp: 36, freq: 0.012, seed: 3.1, lit: [4, 5, 6, 7, 8], sh: [2, 3, 4], snow: 16, hz0: 56, hzL: 40, hzMax: 0.7, haze: 4 },
+    { base: 86, amp: 32, freq: 0.017, seed: 11.7, lit: [5, 6, 7, 8, 9, 10], sh: [1, 2, 3, 4], snow: 13, hz0: 76, hzL: 28, hzMax: 0.6, haze: 3 },
+    { base: 102, amp: 28, freq: 0.021, seed: 23.3, lit: [6, 7, 8, 9, 10, 11, 12], sh: [1, 2, 3, 4, 5], snow: 10, hz0: 90, hzL: 16, hzMax: 0.5, haze: 2 },
+  ];
+  for (const L of layers) {
+    const lit = L.lit.map((i) => P[i]);
+    const sh = L.sh.map((i) => P[i]);
+    const ry = new Float32Array(W + 2);
+    for (let x = -1; x <= W; x += 1) ry[x + 1] = ridgeY(x, L.base, L.amp, L.freq, L.seed);
+    for (let x = 0; x < W; x += 1) {
+      const top = Math.ceil(ry[x + 1]);
+      for (let y = Math.max(0, top); y < 108; y += 1) {
+        const d = y - ry[x + 1];
+        const xs = x - d * 0.75;
+        const slope = ridgeY(xs + 1, L.base, L.amp, L.freq, L.seed) - ridgeY(xs - 1, L.base, L.amp, L.freq, L.seed);
+        const gully = (vnoise(xs * 0.23 + L.seed * 3 + d * 0.05) - 0.5) * 2.6;
+        const isLit = slope + gully > 0;
+        const sn = clamp(1 - d / L.snow + (hash2(x, y) - 0.5) * 0.3, 0, 1);
+        let c;
+        if (d < 1) c = isLit ? lit[lit.length - 1] : sh[sh.length - 1];
+        else c = isLit ? tone(lit, 0.25 + 0.75 * sn, x, y) : tone(sh, 0.15 + 0.6 * sn, x, y);
+        const hz = clamp((y - L.hz0) / L.hzL, 0, 1) * L.hzMax;
+        if (bay(x, y) < hz * 16) c = P[L.haze];
+        bg[y * W + x] = c;
+        mask[y * W + x] = 0;
+      }
+    }
+  }
+
+  // 4. Ice cave back wall: layered translucent ice curtains with ribs.
+  const WALL = [P[0], P[1], P[2], P[3], P[4], P[5], P[6], P[7]];
+  for (let y = 94; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      let k = -1;
+      let yk = 0;
+      for (let j = 0; j < 3; j += 1) {
+        const e = 104 + j * 23 + 7 * Math.sin(x * 0.027 + j * 1.9) + 5 * vnoise(x * 0.09 + j * 13);
+        if (y >= e) {
+          k = j;
+          yk = e;
+        }
+      }
+      let v;
+      if (k < 0) {
+        v = 0.34 - (y - 94) * 0.004;
+      } else {
+        const dd = y - yk;
+        v = 0.2 + k * 0.08 + 0.3 * Math.exp(-dd / 5);
+        if (dd < 1) v += 0.22;
+      }
+      v += 0.05 * Math.sin(x * 0.31 + Math.sin(y * 0.07) * 2.2);
+      v += (vnoise2(x * 0.08, y * 0.03) - 0.5) * 0.14;
+      if (y > 160) v -= (y - 160) / 90;
+      bg[y * W + x] = tone(WALL, v, x, y);
+      mask[y * W + x] = 0;
+    }
+  }
+
+  // 5. Translucent ice pillars (stalactite + stalagmite fused).
+  const PILL = [P[3], P[4], P[5], P[6], P[7], P[8], P[9], P[10]];
+  for (const [pcx, pw, ph] of [[168, 7, 0.3], [318, 8, 1.7], [112, 4, 2.6], [374, 4, 4.1]]) {
+    for (let y = 98; y < FLOOR_Y + 2; y += 1) {
+      const t = (y - 98) / (FLOOR_Y - 96);
+      const pinch = 0.45 + 0.55 * Math.pow(Math.abs(t * 2 - 1), 1.4);
+      const w = pw * pinch + Math.sin(y * 0.09 + ph) * 1.2;
+      const cx = pcx + Math.sin(y * 0.05 + ph) * 1.5;
+      for (let x = Math.floor(cx - w - 1); x <= Math.ceil(cx + w + 1); x += 1) {
+        const u = (x + 0.5 - cx) / w;
+        if (Math.abs(u) > 1) continue;
+        if (Math.abs(u) > 0.78 && bay(x, y) > 7) continue; // translucent edges
+        let v = 0.55 - u * 0.25 - t * 0.35;
+        if (u > -0.55 && u < -0.3) v += 0.3;
+        if (u > 0.82) v -= 0.3;
+        bg[y * W + x] = tone(PILL, v, x, y);
+      }
+    }
+  }
+
+  // 6. Chasm cliffs with snow caps, strata and lit inner edges.
+  const CLIFF = [P[1], P[2], P[3], P[4], P[5], P[6], P[7], P[8], P[9]];
+  const SNOWCAP = [P[9], P[10], P[11], P[12], P[13]];
+  for (let x = 0; x < W; x += 1) {
+    const top = 81 + Math.round(2 * vnoise(x * 0.21 + 4));
+    for (let y = top; y < H; y += 1) {
+      const eL = cliffLeftEdge(y);
+      const eR = cliffRightEdge(y);
+      const isL = x < eL;
+      const isR = x > eR;
+      if (!isL && !isR) continue;
+      let c;
+      if (y < top + 5) {
+        c = tone(SNOWCAP, 0.25 + 0.75 * (1 - (y - top) / 5), x, y);
+        if (y === top) c = P[13];
+      } else {
+        const e = isL ? eL - x : x - eR;
+        const strata = Math.sin(y * 0.55 + vnoise(x * 0.12 + y * 0.02) * 4);
+        let v = 0.2 + 0.08 * strata + (vnoise2(x * 0.2, y * 0.2) - 0.5) * 0.16;
+        if (isL) v += e < 2.5 ? 0.42 : e < 5 ? 0.18 : 0;
+        else v += e < 2.5 ? 0.24 : e < 5 ? 0.08 : 0;
+        if (y > 165) v -= (y - 165) / 120;
+        c = tone(CLIFF, v, x, y);
+      }
+      bg[y * W + x] = c;
+      mask[y * W + x] = 0;
+    }
+  }
+  // Small icicles under the cliff snow lips.
+  for (const side of [-1, 1]) {
+    for (let k = 0; k < 4; k += 1) {
+      const y0 = 86;
+      const ex = side < 0 ? Math.floor(cliffLeftEdge(y0)) - 1 - k * 3 : Math.ceil(cliffRightEdge(y0)) + 1 + k * 3;
+      const len = 2 + Math.floor(seededRand(k * 7 + side * 3) * 5);
+      for (let j = 0; j < len; j += 1) px(bg, ex, y0 + j, j === len - 1 ? P[12] : P[10]);
+    }
+  }
+
+  // 7. Snow floor with drifts, sparkles and ice pebbles.
+  const SNOWR = [P[6], P[7], P[8], P[9], P[10], P[11], P[12], P[13]];
+  for (let x = 0; x < W; x += 1) {
+    const fs = floorSurface(x);
+    const slope = floorSurface(x + 1) - floorSurface(x - 1);
+    for (let y = fs; y < H; y += 1) {
+      const d = y - fs;
+      let v = 0.9 - d * 0.028 + (hash2(x >> 1, y) - 0.5) * 0.12 - slope * 0.08;
+      if (d === 1 && slope > 0) v -= 0.15;
+      let c = tone(SNOWR, v, x, y);
+      if (d === 0) c = hash2(x, 7) > 0.82 ? P[13] : P[12];
+      bg[y * W + x] = c;
+      mask[y * W + x] = 0;
+    }
+  }
+  for (let k = 0; k < 16; k += 1) {
+    const x = Math.floor(70 + seededRand(k * 13 + 1) * 340);
+    const y = floorSurface(x) + 3 + Math.floor(seededRand(k * 13 + 2) * 16);
+    px(bg, x, y, P[12]);
+    px(bg, x + 1, y, P[11]);
+    px(bg, x - 1, y + 1, P[9]);
+    px(bg, x, y + 1, P[8]);
+    px(bg, x + 1, y + 1, P[7]);
+    px(bg, x + 2, y + 1, P[6]);
+  }
+
+  // 8. Glowing crystal clusters.
+  for (const cl of CRYSTAL_CLUSTERS) {
+    for (const [x, y, len, hw, ang] of cl.list) drawCrystal(bg, x, y, len, hw, ang);
+  }
+
+  // 9. Foreground silhouettes (separate transparent layer).
+  const fg = new Uint32Array(W * H);
+  const mound = (cx, cy, rx, ry) => {
+    for (let y = Math.floor(cy - ry); y < H; y += 1) {
+      for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x += 1) {
+        const dx = (x + 0.5 - cx) / rx;
+        const dy = (y + 0.5 - cy) / ry;
+        if (dx * dx + dy * dy > 1) continue;
+        const ddy = (y - 0.5 - cy) / ry;
+        const edge = dx * dx + ddy * ddy > 1;
+        px(fg, x, y, edge ? P[4] : P[1]);
+      }
+    }
+  };
+  const shard = (bx, w, h, lean) => {
+    const tipX = bx + lean;
+    const tipY = H - h;
+    for (let y = tipY; y < H; y += 1) {
+      const t = (y - tipY) / h;
+      const xl = Math.round(tipX + (bx - w / 2 - tipX) * t);
+      const xr = Math.round(tipX + (bx + w / 2 - tipX) * t);
+      for (let x = xl; x <= xr; x += 1) {
+        px(fg, x, y, x === xr ? P[4] : x === xr - 1 ? P[2] : P[0]);
+      }
+    }
+  };
+  shard(8, 12, 36, -3);
+  shard(20, 9, 25, 4);
+  shard(31, 6, 14, 2);
+  mound(14, 220, 36, 13);
+  shard(470, 13, 40, 3);
+  shard(457, 9, 23, -4);
+  shard(446, 6, 13, -2);
+  mound(468, 221, 38, 14);
+
+  // 10. Vignette pixel list (dithered darkening toward the edges).
+  const vig = [];
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      const dx = (x - 240) / 240;
+      const dy = (y - 108) / 140;
+      const v = clamp((Math.sqrt(dx * dx + dy * dy) - 0.8) / 0.45, 0, 1);
+      if (bay(x, y) < v * 11) vig.push(y * W + x);
+    }
+  }
+
+  return { bg, mask, fg, vig: Int32Array.from(vig) };
+}
+
+/** Bridge layer (rebuilt on reset because trapdoor slots depend on penguin count). */
+function buildBridgeLayer(total) {
+  const buf = new Uint32Array(W * H);
+  const doorW = getTrapdoorWidth(total);
+  const doors = [];
+  const slots = [];
+  for (let i = 0; i < total; i += 1) {
+    const sx = getSlotX(i, total);
+    slots.push(sx);
+    doors.push({ x0: sx - Math.floor(doorW / 2), w: doorW });
+  }
+  const doorAt = (x) => {
+    for (let i = 0; i < doors.length; i += 1) {
+      if (x >= doors[i].x0 && x < doors[i].x0 + doors[i].w) return i;
+    }
+    return -1;
+  };
+
+  // Ice block boundaries
+  const bounds = [];
+  let bx = BRIDGE_L;
+  let k = 0;
+  while (bx < BRIDGE_R) {
+    const bw = 12 + Math.floor(seededRand(k * 5 + 3) * 7);
+    bounds.push([bx, Math.min(bw, BRIDGE_R - bx)]);
+    bx += bw;
+    k += 1;
+  }
+
+  const ICE = [P[4], P[5], P[6], P[7], P[8], P[9], P[10]];
+  for (const [b0, bw] of bounds) {
+    for (let x = b0; x < b0 + bw; x += 1) {
+      if (doorAt(x) >= 0) continue;
+      // Snow cap with drift lumps (flattened where penguins stand)
+      let dd = Infinity;
+      for (const s of slots) dd = Math.min(dd, Math.abs(x - s));
+      const f = clamp((dd - 11) / 8, 0, 1);
+      const drift = Math.round(f * (0.6 + 2.8 * vnoise(x * 0.15 + 2)));
+      const top = SNOW_Y - drift;
+      for (let y = top; y < BLOCK_Y; y += 1) {
+        const sv = (y - top) / (BLOCK_Y - top);
+        px(buf, x, y, y === top ? P[13] : tone([P[10], P[11], P[12]], 1 - sv, x, y));
+      }
+      for (let y = BLOCK_Y; y < DECK_BOTTOM; y += 1) {
+        const lx = x - b0;
+        const ly = y - BLOCK_Y;
+        let c;
+        if (lx === 0) c = P[4];
+        else if (lx === 1) c = P[9];
+        else if (ly === 0) c = P[11];
+        else if (ly === 9) c = P[3];
+        else if (ly === 8) c = P[5];
+        else {
+          const v = 0.64 - ly * 0.05 + (lx / bw) * 0.14 + (hash2(x, y) - 0.5) * 0.1;
+          c = tone(ICE, v, x, y);
+          if (hash2(x * 3, y * 7) > 0.97) c = P[11];
+        }
+        px(buf, x, y, c);
+      }
+      if (hash2(x, 3) > 0.7) px(buf, x, BLOCK_Y, P[11]);
+      if (hash2(x, 5) > 0.88) px(buf, x, BLOCK_Y + 1, P[10]);
+    }
+    // Internal crack
+    let cx = b0 + 3 + Math.floor(seededRand(b0 * 0.7) * Math.max(1, bw - 6));
+    let cy = BLOCK_Y + 1 + Math.floor(seededRand(b0 * 1.3) * 3);
+    const steps = 3 + Math.floor(seededRand(b0 * 2.1) * 4);
+    for (let s = 0; s < steps; s += 1) {
+      if (doorAt(cx) < 0 && doorAt(cx + 1) < 0 && cy < DECK_BOTTOM - 2) {
+        px(buf, cx, cy, P[10]);
+        px(buf, cx + 1, cy, P[5]);
+      }
+      cy += 1;
+      cx += Math.floor(seededRand(b0 + s * 9.1) * 3) - 1;
+    }
+  }
+
+  // Trapdoor frame faces
+  for (const d of doors) {
+    for (let y = SNOW_Y - 1; y < DECK_BOTTOM; y += 1) {
+      const c = y < BLOCK_Y ? P[9] : P[3];
+      px(buf, d.x0 - 1, y, c);
+      px(buf, d.x0 + d.w, y, y < BLOCK_Y ? P[10] : P[4]);
+    }
+  }
+
+  // Hanging icicles
+  const tips = [];
+  let ix = BRIDGE_L + 3;
+  let n = 0;
+  while (ix < BRIDGE_R - 3) {
+    let near = false;
+    for (const d of doors) if (ix >= d.x0 - 2 && ix <= d.x0 + d.w + 1) near = true;
+    if (!near) {
+      const r = seededRand(n * 11 + 4);
+      const len = 2 + Math.floor(r * r * 11);
+      for (let j = 0; j < len; j += 1) {
+        const y = DECK_BOTTOM + j;
+        const wdt = j < len * 0.35 ? 3 : j < len * 0.7 ? 2 : 1;
+        if (wdt === 3) {
+          px(buf, ix - 1, y, P[12]);
+          px(buf, ix, y, P[10]);
+          px(buf, ix + 1, y, P[7]);
+        } else if (wdt === 2) {
+          px(buf, ix, y, P[11]);
+          px(buf, ix + 1, y, P[8]);
+        } else {
+          px(buf, ix, y, j === len - 1 ? P[12] : P[10]);
+        }
+      }
+      if (len >= 7) tips.push({ x: ix, y: DECK_BOTTOM + len });
+    }
+    ix += 3 + Math.floor(seededRand(n * 7 + 1) * 5);
+    n += 1;
+  }
+
+  // Lantern posts with iron lanterns
+  for (const L of LANTERNS) {
+    const p0 = L.post;
+    for (let y = 47; y < SNOW_Y + 1; y += 1) {
+      px(buf, p0, y, P[30]);
+      px(buf, p0 + 1, y, hash2(p0, y) > 0.8 ? P[30] : P[31]);
+      px(buf, p0 + 2, y, P[32]);
+    }
+    for (let x = p0 - 1; x <= p0 + 3; x += 1) px(buf, x, 46, P[31]);
+    const a0 = L.arm > 0 ? p0 + 3 : p0 - 1;
+    for (let j = 0; j <= 9; j += 1) {
+      const x = a0 + L.arm * j;
+      px(buf, x, 50, P[32]);
+      px(buf, x, 51, P[31]);
+    }
+    for (let j = 0; j < 5; j += 1) px(buf, a0 + L.arm * j, 56 - j, P[31]);
+    const hx = L.x;
+    px(buf, hx, 52, P[35]);
+    px(buf, hx, 53, P[34]);
+    for (let x = hx - 2; x <= hx + 2; x += 1) px(buf, x, 54, P[33]);
+    for (let x = hx - 3; x <= hx + 3; x += 1) px(buf, x, 55, x === hx + 3 ? P[35] : P[34]);
+    for (let y = 56; y <= 63; y += 1) {
+      px(buf, hx - 3, y, P[33]);
+      px(buf, hx + 3, y, P[34]);
+      for (let x = hx - 2; x <= hx + 2; x += 1) {
+        const v = 0.85 - Math.abs(x - hx) * 0.22 - Math.abs(y - 61) * 0.06;
+        px(buf, x, y, tone([P[25], P[26], P[27], P[28]], v, x, y));
+      }
+    }
+    for (let x = hx - 3; x <= hx + 3; x += 1) px(buf, x, 64, x === hx + 3 ? P[35] : P[34]);
+    for (let x = hx - 2; x <= hx + 2; x += 1) px(buf, x, 65, P[33]);
+    px(buf, hx, 66, P[33]);
+  }
+
+  return { buf, doors, tips, doorW };
+}
+
+/* ==========================================================================
+   Character builders
+   ========================================================================== */
+
+/**
+ * Emperor penguin (~18×28 px), local coords facing right, feet at (0,0).
+ */
+function buildPenguin(spr, o) {
+  spr.begin(o.dir);
+  spr.translate(o.shake || 0, -(o.hop || 0));
+  if (o.rot) spr.rotateAbout(0, -13, o.rot * (o.dir < 0 ? -1 : 1));
+  if (o.lean) spr.rotate(o.lean);
+  spr.scale(o.s);
+  const sq = o.squash || 1;
+  const br = o.breath * 0.35;
+  const headY = -22.8 * sq + br * 0.4;
+  const shoulderY = -16.5 * sq;
+  const flLen = 10;
+
+  // Far flipper (behind body)
+  if (o.ff > 0.45) {
+    const a = o.ff;
+    spr.capsule(0.5, shoulderY, 1.6, 0.5 + Math.sin(a) * flLen * 0.8, shoulderY + Math.cos(a) * flLen, 0.7, M_PSLATE, -0.3);
+  }
+  // Tail & far foot
+  spr.capsule(-5, -2, 1.5, -8, 0, 0.8, M_PSLATE, -0.2);
+  spr.ellipse(-1.5, -0.8, 2.6, 1.1, 0, M_PFEET, -0.2);
+  // Pear-shaped body
+  spr.ellipse(-0.3, -8 * sq, 7, 8.2 * sq + br * 0.3, 0, M_PSLATE);
+  spr.ellipse(0, -15.5 * sq, 5.6, 7 * sq, 0, M_PSLATE);
+  // White belly forming the front silhouette
+  spr.ellipse(1.7, -8.5 * sq, 5.3, 8 * sq + br * 0.4, 0, M_PWHITE);
+  spr.ellipse(2.1, -14.5 * sq, 3.7, 5.5 * sq, 0, M_PWHITE);
+  // Pale yellow upper chest
+  spr.ellipse(2.5, -18 * sq, 2.7, 2.3, 0, M_PCREAM);
+  // Neck & head
+  const turn = o.turn || 0;
+  spr.ellipse(0.6, -19.6 * sq, 4.2, 3, 0, M_PBLACK);
+  spr.save();
+  spr.rotateAbout(1, headY, o.pitch || 0);
+  spr.ellipse(1 - turn * 0.6, headY, 3.9, 3.6, 0, M_PBLACK);
+  // Golden ear patch flowing toward chest
+  spr.ellipse(-0.4 - turn * 0.4, headY + 2.4, 1.3, 2.4, 0.35, M_PGOLD);
+  spr.ellipse(1.6, headY + 4.3, 1.2, 1.4, 0, M_PGOLD, 0.15);
+  // Long slender beak with orange mandible stripe
+  const bl = 1 - turn * 0.55;
+  const open = o.beak || 0;
+  const bx0 = 3.6 - turn * 0.8;
+  if (open > 0.05) {
+    spr.save();
+    spr.rotateAbout(bx0, headY, -0.28 * open);
+    spr.capsule(bx0, headY - 0.4, 1.0, bx0 + 5.2 * bl, headY + 0.6, 0.45, M_PBEAK);
+    spr.restore();
+    spr.dot(bx0 + 2, headY + 1.2, M_MOUTH, 0.6);
+    spr.dot(bx0 + 3, headY + 1.4, M_MOUTH, 0.6);
+    spr.save();
+    spr.rotateAbout(bx0, headY + 0.5, 0.4 * open);
+    spr.capsule(bx0 + 0.4, headY + 1, 0.6, bx0 + 4.4 * bl, headY + 1.3, 0.45, M_PORANGE);
+    spr.restore();
+  } else {
+    spr.capsule(bx0, headY - 0.4, 1.0, bx0 + 5.2 * bl, headY + 0.8, 0.45, M_PBEAK);
+    spr.capsule(bx0 + 0.4, headY + 0.9, 0.5, bx0 + 4.2 * bl, headY + 1.2, 0.4, M_PORANGE);
+  }
+  // Eye with catchlight
+  const ex = 2.4 - turn * 0.7;
+  spr.dot(ex, headY - 1, M_PEYE);
+  if (!o.blink) spr.dot(ex + 0.9, headY - 1.9, M_CATCH);
+  if (o.alert) spr.dot(ex, headY - 1.9, M_CATCH);
+  spr.restore();
+  // Near foot
+  spr.ellipse(2.2, -0.8, 2.8, 1.1, 0, M_PFEET);
+  // Near flipper
+  const a = o.fl;
+  spr.capsule(-1.2, shoulderY, 1.7, -1.2 - Math.sin(a) * flLen, shoulderY + Math.cos(a) * flLen, 0.7, M_PSLATE, 0.05);
+}
+
+/**
+ * Polar bear (~72×44 px), local coords facing right, paws on (0,0).
+ */
+function buildBear(spr, b) {
+  spr.begin(b.dir);
+  const yo = b.yo;
+  const f = b.flex;
+  const br = b.breath;
+
+  const leg = (hx, hy, a1, a2, l1, l2, r1, r2, r3, bias, claws) => {
+    const kx = hx + Math.sin(a1) * l1;
+    const ky = hy + Math.cos(a1) * l1;
+    const ax = kx + Math.sin(a1 + a2) * l2;
+    const ay = ky + Math.cos(a1 + a2) * l2;
+    spr.capsule(hx, hy, r1, kx, ky, r2, M_FUR, bias);
+    spr.capsule(kx, ky, r2, ax, ay, r3, M_FUR, bias);
+    spr.ellipse(ax + 1.6, ay + 0.2, 4.8, 2.3, 0, M_FUR, bias - 0.04);
+    if (claws) {
+      spr.dot(ax + 5.2, ay + 1.5, M_CLAW);
+      spr.dot(ax + 4, ay + 1.8, M_CLAW);
+      spr.dot(ax + 2.8, ay + 1.9, M_CLAW);
+    }
+  };
+
+  const L = b.legs;
+  // Far legs (darker, cooler)
+  leg(-20 - f * 2.5, -19 + yo, L.hf[0], L.hf[1], 9, 6.8, 6.5, 4, 3.3, -0.3, false);
+  leg(12 + f * 2.5, -19 + yo, L.ff[0], L.ff[1], 9, 6.8, 6, 3.8, 3.2, -0.3, false);
+
+  // Massive body: heavy rump, barrel, humped shoulders
+  spr.ellipse(-18 - f * 2.5, -19.5 + yo, 13, 12.5 + br * 0.5, -0.1, M_FUR);
+  spr.ellipse(-2, -18.5 + yo - Math.max(0, -f) * 1.5, 19, 11 + br * 0.7, 0, M_FUR);
+  spr.ellipse(13 + f * 2.5, -21 + yo, 12, 12, 0.15, M_FUR);
+  // Belly fur fringe
+  spr.capsule(-14, -9 + yo + br * 0.3, 2.2, 8, -9.5 + yo + br * 0.3, 2.4, M_FUR, -0.12);
+
+  // Long neck
+  const nx = 28 + f * 2.5;
+  const ny = -24 + yo + (b.neckDrop || 0);
+  spr.capsule(18 + f * 2.5, -22 + yo, 8.5, nx, ny, 5.6, M_FUR);
+
+  // Head group
+  spr.save();
+  spr.translate(f * 2.5 + (b.lunge || 0), yo + (b.neckDrop || 0));
+  spr.rotateAbout(28, -24, b.pitch);
+  // Ear (small, rounded)
+  spr.ellipse(29.6 + (b.ear || 0) * 0.6, -29.4 - (b.ear || 0) * 0.5, 2.1, 1.8, 0.3, M_FUR, -0.05);
+  spr.dot(29.6, -29.4, M_FUR, 0.2);
+  spr.ellipse(33, -25, 6, 5.2, 0, M_FUR);
+  const jaw = b.jaw;
+  if (jaw > 0.08) {
+    spr.ellipse(38.5, -20.4 + jaw * 1.6, 4.4, 0.8 + jaw * 2.3, 0.05, M_MOUTH);
+  }
+  // Lower jaw
+  spr.save();
+  spr.rotateAbout(34, -21, jaw * 0.62);
+  spr.capsule(33.5, -20.6, 2.7, 42, -20.2, 1.6, M_FUR, -0.1);
+  spr.capsule(36, -19.2, 0.5, 41.6, -19.2, 0.5, M_NOSE);
+  if (jaw > 0.25) {
+    spr.dot(40.6, -21.4, M_TEETH, 1);
+    spr.dot(38.6, -21.3, M_TEETH, 0.4);
+  }
+  spr.restore();
+  // Roman-nose muzzle
+  spr.capsule(35, -24, 3.7, 43, -22.4, 2.4, M_FUR);
+  spr.ellipse(38.6, -25.1, 3.6, 2.4, 0.15, M_FUR, 0.04);
+  spr.capsule(37, -20.6, 0.55, 43.2, -21, 0.55, M_NOSE);
+  if (jaw > 0.25) {
+    spr.dot(41.2, -20.2, M_TEETH, 1);
+    spr.dot(39, -20.2, M_TEETH, 0.4);
+  }
+  spr.ellipse(43.7, -22.7, 1.7, 1.35, 0, M_NOSE);
+  spr.dot(43.6, -23.6, M_NOSE, 1);
+  // Eye
+  if (b.blink) {
+    spr.dot(35.6, -26.4, M_FUR, 0.1);
+    spr.dot(36.6, -26.4, M_FUR, 0.1);
+  } else {
+    spr.dot(35.8, -26.6, M_EYE);
+    spr.dot(36.8, -26.6, M_EYE);
+  }
+  // Tongue lick
+  if (b.tongue > 0.05) {
+    const t = b.tongue;
+    spr.capsule(39.5, -20.6 + jaw, 1.2, 41 + t * 3.2, -20.8 - t * 2.6, 1.1, M_TONGUE);
+  }
+  spr.restore();
+
+  // Near legs (front of body)
+  leg(-17 - f * 2.5, -18 + yo, L.hn[0], L.hn[1], 9, 6.8, 7.4, 4.5, 3.8, 0, true);
+  leg(15 + f * 2.5, -18 + yo, L.fn[0], L.fn[1], 9, 6.8, 6.8, 4.4, 3.7, 0, true);
+}
+
+/* ==========================================================================
+   PenguinArena — pixel-art canvas controller (480 × 216)
    ========================================================================== */
 
 export class PenguinArena {
@@ -232,41 +1341,35 @@ export class PenguinArena {
     this._lastFrameTime = 0;
     this._elapsed = 0;
     this._destroyed = false;
-    this._dpr = 1;
 
-    // Scenic ambient elements
-    this._stars = this._createStars();
-    this._snowflakes = this._createSnowflakes();
-    this._frostMotes = this._createFrostMotes();
-    this._waterDrops = this._createWaterDrops();
-    this._crystals = this._createCrystals();
     this._particles = [];
     this._pawprints = [];
-    this._breathClouds = [];
-
-    // Per-slot penguin & trapdoor state
     this._penguins = [];
     this._trapdoors = [];
-
-    // Articulated hero polar bear state (stands & waits, watches falls, sprints after landing!)
+    this._drips = [];
+    this._stars = this._createStars();
+    this._flakes = this._createSnowflakes();
+    this._shooting = { active: false, cd: 4 + Math.random() * 6, x: 0, y: 0, vx: 0, vy: 0, life: 0 };
     this._bear = this._createInitialBear();
-
-    // Camera impact shake
     this._shakeTimer = 0;
-    this._shakeIntensity = 0;
+    this._screenFlash = 0;
 
-    // Cached static offscreen backdrop
-    this._bgCache = null;
+    this._static = buildStaticLayers();
+    this._bridge = null;
+    this._penguinSprite = new Sprite(40, 46, 20, 41);
+    this._bearSprite = new Sprite(116, 76, 52, 68);
 
-    // Cached DOM references
     this._canvas = null;
     this._ctx = null;
+    this._low = null;
+    this._lowCtx = null;
+    this._img = null;
+    this._fb = new Uint32Array(W * H);
     this._statusPill = null;
     this._statusNote = null;
 
     ensureArenaStyles();
     this._buildDom();
-    this._buildStaticBackdropCache();
     this.reset(totalPenguins);
     this._startLoop();
   }
@@ -276,33 +1379,37 @@ export class PenguinArena {
     return {
       x: BEAR_HOME_X,
       yOffset: 0,
-      dir: 1, // 1 = right, -1 = left
+      dir: 1,
       mode: 'wait', // 'wait' | 'watch' | 'sprint' | 'chompOpen' | 'chompSnap' | 'chompChew' | 'chompLick' | 'grumble'
       modeTimer: 0,
       targetIndex: null,
       targetX: null,
       stridePhase: 0,
-      headPitch: -0.24, // negative = looking up toward ramp
+      headPitch: -0.2,
       jawOpen: 0,
       tongueOut: 0,
       blinkCooldown: 2.2,
       blinkTimer: 0,
-      breathTimer: 1.4,
+      breathTimer: 1.2,
+      sniffTimer: 3.5,
+      sniff: 0,
+      earTimer: 2.5,
+      ear: 0,
       dustTimer: 0,
       pawprintCooldown: 0,
+      pawSide: 0,
       pawStamp: 0,
+      stompHit: false,
+      lunge: 0,
       hitFlashTimer: 0,
       bubbleText: null,
-      bubbleColor: '#be123c',
-      bubbleBg: '#ffffff',
       bubbleTimer: 0,
-      bubbleScale: 1,
-      bubbleJagged: false,
+      bubbleMax: 1,
     };
   }
 
   /**
-   * Resets all penguins onto the ramp, closes trapdoors, and resets the bear to waiting on the left.
+   * Resets all penguins onto the bridge, closes trapdoors, and resets the bear.
    * @param {number} [totalPenguins]
    */
   reset(totalPenguins = this._state ? this._state.total : 10) {
@@ -310,33 +1417,27 @@ export class PenguinArena {
     this._state = createPenguinState(totalPenguins);
     this._particles = [];
     this._pawprints = [];
-    this._breathClouds = [];
     this._shakeTimer = 0;
-    this._shakeIntensity = 0;
+    this._screenFlash = 0;
 
     const total = this._state.total;
-    const doorW = getTrapdoorWidth(total);
+    this._bridge = buildBridgeLayer(total);
+    this._drips = this._bridge.tips
+      .filter((_, i) => i % 2 === 0)
+      .slice(0, 8)
+      .map((t, i) => ({ x: t.x, y0: t.y, y: t.y, vy: 0, active: false, cd: 1 + seededRand(i * 19 + 4) * 5 }));
 
     this._penguins = [];
     this._trapdoors = [];
-
     for (let i = 0; i < total; i += 1) {
       const slotX = getSlotX(i, total);
-      this._trapdoors.push({
-        x: slotX,
-        width: doorW,
-        angle: 0,
-        targetAngle: 0,
-        vel: 0,
-        crackGlow: 0,
-      });
-
+      const d = this._bridge.doors[i];
+      this._trapdoors.push({ x0: d.x0, w: d.w, angle: 0, targetAngle: 0, vel: 0, crackGlow: 0, snow: true });
       this._penguins.push({
         index: i,
         x: slotX,
-        y: RAMP_Y - 2, // feet contact on snow blanket
+        y: SNOW_Y,
         vy: 0,
-        vx: 0,
         rotation: 0,
         rotSpeed: 0,
         status: 'idle', // 'idle' | 'cheer' | 'panic' | 'falling' | 'landed' | 'eaten'
@@ -345,9 +1446,14 @@ export class PenguinArena {
         cheerDelay: 0,
         breathPhase: seededRand(i * 13 + 5) * Math.PI * 2,
         swayPhase: seededRand(i * 17 + 11) * Math.PI * 2,
-        headTilt: (seededRand(i * 23 + 3) - 0.5) * 0.14,
+        swaySpeed: 1.1 + seededRand(i * 31 + 2) * 0.7,
+        scale: 0.94 + seededRand(i * 7 + 3) * 0.12,
         blinkCooldown: 1.4 + seededRand(i * 29 + 7) * 3.8,
         blinkTimer: 0,
+        lookTimer: 0.5 + seededRand(i * 37 + 1) * 3,
+        lookMode: 0,
+        turn: 0,
+        pitch: 0,
         facingDir: slotX > BEAR_HOME_X ? -1 : 1,
         squashY: 1,
       });
@@ -355,14 +1461,13 @@ export class PenguinArena {
 
     this._bear = this._createInitialBear();
     this._aimBearTowardRemaining();
-
     this._updateStatusUi();
     this._render();
   }
 
   /**
-   * Triggers a trapdoor cracking open, penguin panic + gravity drop to the cave floor,
-   * and the polar bear watching then sprinting over to eat it once it hits the snow.
+   * Wrong answer: trapdoor cracks open, penguin panics, falls, lands — then the bear
+   * sprints over and eats it.
    */
   onWrongAnswer() {
     const prevRemaining = this._state.remaining;
@@ -385,25 +1490,24 @@ export class PenguinArena {
         door.angle = 92;
         door.targetAngle = 92;
         door.crackGlow = 0;
+        door.snow = false;
       }
-      if (penguin) {
-        penguin.status = 'eaten';
-      }
-      this._bear.x = clamp(targetX - (targetX >= this._bear.x ? 34 : -34), 86, CANVAS_W - 86);
-      this._bear.dir = targetX >= this._bear.x ? 1 : -1;
-      this._bear.mode = 'chompLick';
-      this._bear.tongueOut = 1;
-      this._bear.bubbleText = 'NOM!';
-      this._bear.bubbleColor = '#be123c';
-      this._bear.bubbleBg = '#fff1f2';
-      this._bear.bubbleTimer = 1.0;
-      this._bear.bubbleJagged = false;
+      if (penguin) penguin.status = 'eaten';
+      const bear = this._bear;
+      bear.dir = targetX >= bear.x ? 1 : -1;
+      bear.x = clamp(targetX - bear.dir * 44, 50, W - 50);
+      bear.mode = 'chompLick';
+      bear.modeTimer = 0.42;
+      bear.tongueOut = 1;
+      bear.jawOpen = 0.22;
+      this._setBubble('NOM!', 1.0);
       this._render();
 
       this._schedule(() => {
-        this._bear.bubbleText = null;
-        this._bear.tongueOut = 0;
-        this._bear.mode = 'wait';
+        bear.bubbleText = null;
+        bear.tongueOut = 0;
+        bear.jawOpen = 0;
+        bear.mode = 'wait';
         this._aimBearTowardRemaining();
         this._state = { ...this._state, bearState: 'patrol' };
         this._render();
@@ -412,26 +1516,22 @@ export class PenguinArena {
       return { ...this._state };
     }
 
-    // Crack & swing open hinged ice-and-timber trapdoor with ice shards
     if (door) {
       door.targetAngle = 92;
       door.vel = 520;
-      door.crackGlow = 1.0;
-      this._spawnIceShards(targetX, RAMP_Y + 8);
+      door.crackGlow = 1;
+      this._spawnIceShards(targetX, SNOW_Y + 6);
     }
 
-    // 280ms dramatic panic beat before falling
     if (penguin) {
       penguin.status = 'panic';
       penguin.timer = 0.28;
       penguin.vy = 0;
-      penguin.vx = 0;
       penguin.rotation = 0;
-      penguin.y = RAMP_Y - 2;
-      this._spawnSweatBurst(targetX, RAMP_Y - 36);
+      penguin.y = SNOW_Y;
+      this._spawnSweat(targetX, SNOW_Y - 26);
     }
 
-    // Bear watches attentively from its current spot (does NOT run until penguin hits the floor!)
     if (this._bear.mode === 'wait' || this._bear.mode === 'grumble') {
       this._bear.mode = 'watch';
       this._bear.targetIndex = idx;
@@ -444,7 +1544,7 @@ export class PenguinArena {
   }
 
   /**
-   * Celebrates a correct answer: remaining penguins hop and flap joyfully, while the bear grumbles.
+   * Correct answer: remaining penguins hop and flap joyfully, the bear grumbles.
    */
   onCorrectAnswer() {
     this._state = celebratePenguins(this._state);
@@ -452,31 +1552,23 @@ export class PenguinArena {
 
     for (let i = 0; i < this._state.remaining; i += 1) {
       const p = this._penguins[i];
-      if (!p || p.status === 'panic' || p.status === 'falling' || p.status === 'landed' || p.status === 'eaten') {
-        continue;
-      }
+      if (!p || p.status !== 'idle' && p.status !== 'cheer') continue;
       if (!reduced) {
         p.status = 'cheer';
-        p.cheerDelay = i * 0.036;
+        p.cheerDelay = i * 0.04;
         p.timer = 0.72;
-        this._spawnCheerSparkles(p.x, RAMP_Y - 46);
+        this._spawnSparkles(p.x, SNOW_Y - 30);
       }
     }
 
-    // Bear pauses, lowers head, stamps heavy paw & grumbles (unless currently hunting/eating)
-    if (this._bear.mode === 'wait' || this._bear.mode === 'grumble') {
-      this._bear.mode = 'grumble';
-      this._bear.modeTimer = 1.05;
-      this._bear.pawStamp = 1.0;
-      this._bear.bubbleText = 'Grrr...';
-      this._bear.bubbleColor = '#b45309';
-      this._bear.bubbleBg = '#fef3c7';
-      this._bear.bubbleTimer = 1.05;
-      this._bear.bubbleJagged = true;
-      if (!reduced) {
-        this._spawnSnowSpray(this._bear.x + this._bear.dir * 34, FLOOR_Y, -this._bear.dir, 9);
-        this._spawnBreathCloud(true);
-      }
+    const bear = this._bear;
+    if (bear.mode === 'wait' || bear.mode === 'grumble') {
+      bear.mode = 'grumble';
+      bear.modeTimer = 1.05;
+      bear.pawStamp = 1;
+      bear.stompHit = false;
+      this._setBubble('GRRR!', 1.05);
+      if (!reduced) this._spawnBreath(true);
     }
 
     this._updateStatusUi();
@@ -485,8 +1577,8 @@ export class PenguinArena {
       this._render();
       this._schedule(() => {
         if (this._state.bearState === 'grumble') {
-          this._bear.mode = 'wait';
-          this._bear.bubbleText = null;
+          bear.mode = 'wait';
+          bear.bubbleText = null;
           this._state = { ...this._state, bearState: 'patrol' };
           this._render();
         }
@@ -496,16 +1588,12 @@ export class PenguinArena {
     return { ...this._state };
   }
 
-  /**
-   * Returns a snapshot of the current arena state.
-   */
+  /** Returns a snapshot of the current arena state. */
   getState() {
     return { ...this._state };
   }
 
-  /**
-   * Stops animation loop, clears timers, and cleans up DOM nodes.
-   */
+  /** Stops the animation loop, clears timers and removes DOM nodes. */
   destroy() {
     this._destroyed = true;
     this._clearTimers();
@@ -518,20 +1606,20 @@ export class PenguinArena {
     }
     this._canvas = null;
     this._ctx = null;
-    this._bgCache = null;
+    this._low = null;
+    this._lowCtx = null;
+    this._img = null;
   }
 
   /* ------------------------------------------------------------------------
-     Private Setup, Scenic Generators & Offscreen Static Backdrop Cache
+     Setup helpers
      ------------------------------------------------------------------------ */
 
   /** @private */
   _schedule(fn, delayMs) {
     const id = setTimeout(() => {
       this._timers.delete(id);
-      if (!this._destroyed) {
-        fn();
-      }
+      if (!this._destroyed) fn();
     }, delayMs);
     this._timers.add(id);
     return id;
@@ -539,38 +1627,37 @@ export class PenguinArena {
 
   /** @private */
   _clearTimers() {
-    for (const id of this._timers) {
-      clearTimeout(id);
-    }
+    for (const id of this._timers) clearTimeout(id);
     this._timers.clear();
+  }
+
+  /** @private */
+  _setBubble(text, duration) {
+    this._bear.bubbleText = text;
+    this._bear.bubbleTimer = duration;
+    this._bear.bubbleMax = duration;
   }
 
   /** @private */
   _aimBearTowardRemaining() {
     const remaining = this._state.remaining;
     if (remaining <= 0) return;
-    // Face toward the middle/rightmost remaining penguin so bear watches the ramp eagerly
-    const targetPenguin = this._penguins[remaining - 1];
-    if (targetPenguin) {
-      if (Math.abs(targetPenguin.x - this._bear.x) > 12) {
-        this._bear.dir = targetPenguin.x >= this._bear.x ? 1 : -1;
-      }
-    }
+    let sum = 0;
+    for (let i = 0; i < remaining; i += 1) sum += this._penguins[i] ? this._penguins[i].x : 0;
+    const cx = sum / remaining;
+    if (Math.abs(cx - this._bear.x) > 12) this._bear.dir = cx >= this._bear.x ? 1 : -1;
   }
 
   /** @private */
   _createStars() {
     const stars = [];
-    for (let i = 0; i < 64; i += 1) {
-      const x = 14 + seededRand(i * 3 + 1) * (CANVAS_W - 28);
-      const y = 8 + seededRand(i * 3 + 2) * 84;
-      if (Math.hypot(x - 665, y - 44) < 38) continue;
+    for (let i = 0; i < 90; i += 1) {
       stars.push({
-        x,
-        y,
-        r: 0.7 + seededRand(i * 5 + 4) * 1.35,
+        x: Math.floor(seededRand(i * 3 + 1) * W),
+        y: Math.floor(seededRand(i * 3 + 2) * 80),
+        b: seededRand(i * 5 + 4),
         phase: seededRand(i * 3 + 3) * Math.PI * 2,
-        speed: 1.0 + seededRand(i * 7 + 9) * 2.4,
+        speed: 1 + seededRand(i * 7 + 9) * 2.6,
       });
     }
     return stars;
@@ -579,59 +1666,18 @@ export class PenguinArena {
   /** @private */
   _createSnowflakes() {
     const flakes = [];
-    for (let i = 0; i < 66; i += 1) {
-      const layer = i < 28 ? 0 : i < 50 ? 1 : 2;
+    for (let i = 0; i < 90; i += 1) {
+      const layer = i < 40 ? 0 : i < 72 ? 1 : 2;
       flakes.push({
-        x: seededRand(i * 7 + 1) * CANVAS_W,
-        y: seededRand(i * 7 + 2) * (RAMP_Y + 24),
+        x: seededRand(i * 7 + 1) * W,
+        y: seededRand(i * 7 + 2) * H,
         layer,
-        r: layer === 0 ? 1.1 : layer === 1 ? 2.0 : 3.2,
-        speed: layer === 0 ? 12 + seededRand(i * 7 + 3) * 8 : layer === 1 ? 22 + seededRand(i * 7 + 3) * 12 : 36 + seededRand(i * 7 + 3) * 16,
-        drift: layer === 0 ? 6 : layer === 1 ? 13 : 20,
+        speed: layer === 0 ? 6 + seededRand(i * 7 + 3) * 5 : layer === 1 ? 13 + seededRand(i * 7 + 3) * 8 : 28 + seededRand(i * 7 + 3) * 14,
+        drift: layer === 0 ? 3 : layer === 1 ? 6 : 11,
         phase: seededRand(i * 7 + 4) * Math.PI * 2,
-        alpha: layer === 0 ? 0.35 : layer === 1 ? 0.55 : 0.75,
       });
     }
     return flakes;
-  }
-
-  /** @private */
-  _createFrostMotes() {
-    const motes = [];
-    for (let i = 0; i < 24; i += 1) {
-      motes.push({
-        x: 60 + seededRand(i * 11 + 2) * (CANVAS_W - 120),
-        y: CAVE_TOP + 18 + seededRand(i * 11 + 5) * (FLOOR_Y - CAVE_TOP - 32),
-        r: 0.9 + seededRand(i * 11 + 8) * 1.4,
-        phase: seededRand(i * 11 + 9) * Math.PI * 2,
-        speed: 0.8 + seededRand(i * 11 + 3) * 1.4,
-      });
-    }
-    return motes;
-  }
-
-  /** @private */
-  _createWaterDrops() {
-    const xs = [54, 152, 266, 398, 526, 650, 744];
-    return xs.map((x, i) => ({
-      x,
-      y: CAVE_TOP + 14,
-      vy: 0,
-      active: false,
-      cooldown: 1.2 + seededRand(i * 19 + 4) * 5.2,
-    }));
-  }
-
-  /** @private */
-  _createCrystals() {
-    return [
-      { x: 34, y: 238, angle: 0.38, scale: 1.05, phase: 0.4 },
-      { x: 46, y: 286, angle: 0.52, scale: 0.82, phase: 2.1 },
-      { x: 766, y: 232, angle: -0.38, scale: 1.08, phase: 1.3 },
-      { x: 754, y: 282, angle: -0.5, scale: 0.85, phase: 3.5 },
-      { x: 218, y: 264, angle: 0.14, scale: 0.62, phase: 2.7, bg: true },
-      { x: 586, y: 256, angle: -0.18, scale: 0.65, phase: 0.9, bg: true },
-    ];
   }
 
   /** @private */
@@ -641,21 +1687,28 @@ export class PenguinArena {
     const wrap = document.createElement('div');
     wrap.className = 'penguin-arena-wrap';
 
-    const dpr = typeof window !== 'undefined' ? clamp(window.devicePixelRatio || 1, 1, 2) : 1;
-    this._dpr = dpr;
-
     const canvas = document.createElement('canvas');
     canvas.className = 'penguin-arena-canvas';
-    canvas.width = Math.round(CANVAS_W * dpr);
-    canvas.height = Math.round(CANVAS_H * dpr);
+    canvas.width = W * SCALE;
+    canvas.height = H * SCALE;
     canvas.setAttribute('role', 'img');
-    canvas.setAttribute('aria-label', 'Isrampe med pingviner og sulten isbjørn i ishulen');
+    canvas.setAttribute('aria-label', 'Isbro med pingviner over en ishule med en sulten isbjørn');
     this._canvas = canvas;
     this._ctx = canvas.getContext('2d');
+    if (this._ctx) this._ctx.imageSmoothingEnabled = false;
+
+    const low = document.createElement('canvas');
+    low.width = W;
+    low.height = H;
+    this._low = low;
+    this._lowCtx = low.getContext('2d');
+    if (this._lowCtx && typeof this._lowCtx.createImageData === 'function') {
+      this._img = this._lowCtx.createImageData(W, H);
+      this._fb = new Uint32Array(this._img.data.buffer);
+    }
 
     wrap.appendChild(canvas);
 
-    // Accessible Norwegian status bar
     const statusBar = document.createElement('div');
     statusBar.className = 'penguin-status-bar';
     statusBar.setAttribute('aria-live', 'polite');
@@ -671,373 +1724,7 @@ export class PenguinArena {
     statusBar.appendChild(pill);
     statusBar.appendChild(note);
     wrap.appendChild(statusBar);
-
     this._container.appendChild(wrap);
-  }
-
-  /** @private */
-  _buildStaticBackdropCache() {
-    if (typeof document === 'undefined') return;
-
-    const bg = document.createElement('canvas');
-    bg.width = Math.round(CANVAS_W * this._dpr);
-    bg.height = Math.round(CANVAS_H * this._dpr);
-    const ctx = bg.getContext('2d');
-    if (!ctx) return;
-
-    ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-
-    this._renderStaticArcticSky(ctx);
-    this._renderStaticGlacierMountains(ctx);
-    this._renderStaticIceCave(ctx);
-    this._bgCache = bg;
-  }
-
-  /** @private */
-  _renderStaticArcticSky(ctx) {
-    // Rich Arctic twilight-to-midnight gradient
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, RAMP_Y + 8);
-    skyGrad.addColorStop(0, '#030917');
-    skyGrad.addColorStop(0.38, '#08162d');
-    skyGrad.addColorStop(0.75, '#10294d');
-    skyGrad.addColorStop(1, '#1b4372');
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, CANVAS_W, RAMP_Y + 8);
-
-    // Soft polar horizon haze
-    const horizonGlow = ctx.createRadialGradient(400, RAMP_Y + 12, 30, 400, RAMP_Y + 12, 420);
-    horizonGlow.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
-    horizonGlow.addColorStop(0.5, 'rgba(30, 64, 175, 0.10)');
-    horizonGlow.addColorStop(1, 'rgba(3, 9, 23, 0)');
-    ctx.fillStyle = horizonGlow;
-    ctx.fillRect(0, 20, CANVAS_W, RAMP_Y);
-
-    // Glowing crescent moon at (665, 44)
-    const mx = 665;
-    const my = 44;
-
-    const haloOuter = ctx.createRadialGradient(mx, my, 8, mx, my, 74);
-    haloOuter.addColorStop(0, 'rgba(254, 249, 195, 0.34)');
-    haloOuter.addColorStop(0.35, 'rgba(186, 230, 253, 0.16)');
-    haloOuter.addColorStop(1, 'rgba(186, 230, 253, 0)');
-    ctx.fillStyle = haloOuter;
-    ctx.beginPath();
-    ctx.arc(mx, my, 74, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Moon disc clipped to crescent shape
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(mx, my, 18, 0, Math.PI * 2);
-    ctx.clip();
-
-    const moonGrad = ctx.createRadialGradient(mx - 6, my - 5, 2, mx, my, 20);
-    moonGrad.addColorStop(0, '#ffffff');
-    moonGrad.addColorStop(0.55, '#fef9c3');
-    moonGrad.addColorStop(1, '#fde047');
-    ctx.fillStyle = moonGrad;
-    ctx.fillRect(mx - 20, my - 20, 40, 40);
-
-    // Subtle lunar craters
-    ctx.fillStyle = 'rgba(202, 138, 4, 0.18)';
-    ctx.beginPath();
-    ctx.arc(mx - 7, my + 4, 3.2, 0, Math.PI * 2);
-    ctx.arc(mx - 9, my - 6, 2.2, 0, Math.PI * 2);
-    ctx.arc(mx - 2, my + 9, 2.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Carve dark night-side shadow to form crisp crescent
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.beginPath();
-    ctx.arc(mx + 8.5, my - 4.5, 16.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  /** @private */
-  _renderStaticGlacierMountains(ctx) {
-    // Far glacier range (cool slate-blue silhouettes)
-    const farPeaks = [
-      [0, 146], [42, 102], [96, 118], [156, 78], [218, 114], [288, 86],
-      [352, 116], [424, 72], [492, 108], [556, 82], [622, 116], [696, 88],
-      [756, 108], [800, 92], [800, 148], [0, 148],
-    ];
-    ctx.beginPath();
-    ctx.moveTo(farPeaks[0][0], farPeaks[0][1]);
-    for (let i = 1; i < farPeaks.length; i += 1) {
-      ctx.lineTo(farPeaks[i][0], farPeaks[i][1]);
-    }
-    ctx.closePath();
-    const farGrad = ctx.createLinearGradient(0, 70, 0, 148);
-    farGrad.addColorStop(0, '#1e3a5f');
-    farGrad.addColorStop(0.55, '#132a47');
-    farGrad.addColorStop(1, '#0b1c33');
-    ctx.fillStyle = farGrad;
-    ctx.fill();
-
-    // Moonlit snow facets on far peaks (right slopes catch moonlight)
-    const farLit = [
-      [[156, 78], [182, 104], [154, 112]],
-      [[288, 86], [314, 112], [286, 118]],
-      [[424, 72], [454, 104], [422, 114]],
-      [[556, 82], [584, 110], [554, 116]],
-      [[696, 88], [724, 112], [692, 118]],
-    ];
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.16)';
-    for (let i = 0; i < farLit.length; i += 1) {
-      const tri = farLit[i];
-      ctx.beginPath();
-      ctx.moveTo(tri[0][0], tri[0][1]);
-      ctx.lineTo(tri[1][0], tri[1][1]);
-      ctx.lineTo(tri[2][0], tri[2][1]);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Closer faceted glacial ridges
-    const nearPeaks = [
-      [0, 148], [64, 108], [128, 128], [202, 96], [272, 130], [344, 102],
-      [414, 126], [496, 94], [574, 128], [648, 98], [726, 124], [800, 104],
-      [800, 148], [0, 148],
-    ];
-    ctx.beginPath();
-    ctx.moveTo(nearPeaks[0][0], nearPeaks[0][1]);
-    for (let i = 1; i < nearPeaks.length; i += 1) {
-      ctx.lineTo(nearPeaks[i][0], nearPeaks[i][1]);
-    }
-    ctx.closePath();
-    const nearGrad = ctx.createLinearGradient(0, 92, 0, 148);
-    nearGrad.addColorStop(0, '#274c77');
-    nearGrad.addColorStop(0.5, '#163254');
-    nearGrad.addColorStop(1, '#0d223d');
-    ctx.fillStyle = nearGrad;
-    ctx.fill();
-
-    // Crisp glacial ridge highlights
-    ctx.strokeStyle = 'rgba(224, 242, 254, 0.25)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    for (let i = 1; i <= 11; i += 2) {
-      ctx.moveTo(nearPeaks[i][0], nearPeaks[i][1]);
-      ctx.lineTo(nearPeaks[i + 1][0], nearPeaks[i + 1][1]);
-    }
-    ctx.stroke();
-
-    // Soft misty valley fog right above the ice ramp
-    const mistGrad = ctx.createLinearGradient(0, 118, 0, 148);
-    mistGrad.addColorStop(0, 'rgba(186, 230, 253, 0)');
-    mistGrad.addColorStop(1, 'rgba(186, 230, 253, 0.18)');
-    ctx.fillStyle = mistGrad;
-    ctx.fillRect(0, 118, CANVAS_W, 30);
-  }
-
-  /** @private */
-  _renderStaticIceCave(ctx) {
-    // Deep cavern interior gradient
-    const caveGrad = ctx.createLinearGradient(0, CAVE_TOP, 0, FLOOR_Y + 12);
-    caveGrad.addColorStop(0, '#040b18');
-    caveGrad.addColorStop(0.35, '#07162b');
-    caveGrad.addColorStop(0.75, '#0c2342');
-    caveGrad.addColorStop(1, '#13345e');
-    ctx.fillStyle = caveGrad;
-    ctx.fillRect(0, CAVE_TOP, CANVAS_W, CANVAS_H - CAVE_TOP);
-
-    // Subtle deep-cave faceted ice rock ribs
-    const backWalls = [
-      { x: 96, y: 174, w: 94, h: 146 },
-      { x: 248, y: 184, w: 112, h: 136 },
-      { x: 446, y: 180, w: 108, h: 140 },
-      { x: 604, y: 172, w: 98, h: 148 },
-    ];
-    for (let i = 0; i < backWalls.length; i += 1) {
-      const b = backWalls[i];
-      ctx.beginPath();
-      ctx.moveTo(b.x, b.y + b.h);
-      ctx.lineTo(b.x + 14, b.y + 16);
-      ctx.lineTo(b.x + b.w * 0.45, b.y);
-      ctx.lineTo(b.x + b.w - 10, b.y + 22);
-      ctx.lineTo(b.x + b.w, b.y + b.h);
-      ctx.closePath();
-      const wg = ctx.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
-      wg.addColorStop(0, 'rgba(30, 68, 114, 0.34)');
-      wg.addColorStop(0.5, 'rgba(15, 42, 76, 0.22)');
-      wg.addColorStop(1, 'rgba(7, 20, 38, 0.12)');
-      ctx.fillStyle = wg;
-      ctx.fill();
-
-      // Subtle glacier vein highlight
-      ctx.strokeStyle = 'rgba(125, 211, 252, 0.11)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(b.x + b.w * 0.45, b.y + 4);
-      ctx.lineTo(b.x + b.w * 0.36, b.y + b.h * 0.55);
-      ctx.lineTo(b.x + b.w * 0.48, b.y + b.h);
-      ctx.stroke();
-    }
-
-    // Subtle carved ice plaque "ISHULEN" on upper back wall
-    const px = 342;
-    const py = 180;
-    const pw = 116;
-    const ph = 24;
-    traceRoundedRect(ctx, px, py, pw, ph, 6);
-    ctx.fillStyle = 'rgba(8, 22, 42, 0.72)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(125, 211, 252, 0.24)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.font = '700 11px system-ui, -apple-system, Segoe UI, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(186, 230, 253, 0.46)';
-    ctx.fillText('ISHULEN', 400, py + ph / 2 + 0.5);
-
-    // Sculpted arched ice-cave pillars framing left and right edges
-    this._drawCavePillar(ctx, true);
-    this._drawCavePillar(ctx, false);
-
-    // Dramatic dark cavern vignette (makes white bear & penguins pop!)
-    const vig = ctx.createRadialGradient(400, 248, 120, 400, 248, 430);
-    vig.addColorStop(0, 'rgba(4, 11, 24, 0)');
-    vig.addColorStop(0.7, 'rgba(3, 8, 18, 0.24)');
-    vig.addColorStop(1, 'rgba(2, 6, 14, 0.56)');
-    ctx.fillStyle = vig;
-    ctx.fillRect(0, CAVE_TOP, CANVAS_W, FLOOR_Y - CAVE_TOP + 6);
-
-    // Contoured multi-layered snow cave floor (y = 312..360)
-    const floorGrad = ctx.createLinearGradient(0, FLOOR_Y - 6, 0, CANVAS_H);
-    floorGrad.addColorStop(0, '#f0f9ff');
-    floorGrad.addColorStop(0.2, '#bae6fd');
-    floorGrad.addColorStop(0.62, '#7dd3fc');
-    floorGrad.addColorStop(0.88, '#0284c7');
-    floorGrad.addColorStop(1, '#075985');
-
-    ctx.beginPath();
-    ctx.moveTo(0, CANVAS_H);
-    ctx.lineTo(0, FLOOR_Y - 4);
-    for (let x = 0; x <= CANVAS_W; x += 20) {
-      const wave = Math.sin(x * 0.015) * 3.2 + Math.cos(x * 0.038) * 1.4;
-      ctx.lineTo(x, FLOOR_Y - 2 + wave);
-    }
-    ctx.lineTo(CANVAS_W, CANVAS_H);
-    ctx.closePath();
-    ctx.fillStyle = floorGrad;
-    ctx.fill();
-
-    // Soft bright snow crest highlight along top edge of floor
-    ctx.beginPath();
-    for (let x = 0; x <= CANVAS_W; x += 16) {
-      const wave = Math.sin(x * 0.015) * 3.2 + Math.cos(x * 0.038) * 1.4;
-      if (x === 0) ctx.moveTo(x, FLOOR_Y - 2 + wave);
-      else ctx.lineTo(x, FLOOR_Y - 2 + wave);
-    }
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-
-    // Subtle secondary foreground snowdrift ridge
-    ctx.beginPath();
-    ctx.moveTo(0, CANVAS_H);
-    for (let x = 0; x <= CANVAS_W; x += 25) {
-      const wave = Math.sin(x * 0.012 + 1.7) * 4.5;
-      ctx.lineTo(x, FLOOR_Y + 22 + wave);
-    }
-    ctx.lineTo(CANVAS_W, CANVAS_H);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(14, 116, 144, 0.16)';
-    ctx.fill();
-
-    // Small shaded ice stones scattered on the floor
-    const pebbles = [
-      { x: 108, y: FLOOR_Y + 18, rx: 6, ry: 2.8 },
-      { x: 274, y: FLOOR_Y + 24, rx: 5, ry: 2.3 },
-      { x: 512, y: FLOOR_Y + 20, rx: 6.5, ry: 3 },
-      { x: 678, y: FLOOR_Y + 23, rx: 5.5, ry: 2.5 },
-    ];
-    for (let i = 0; i < pebbles.length; i += 1) {
-      const p = pebbles[i];
-      ctx.fillStyle = 'rgba(7, 89, 133, 0.35)';
-      ctx.beginPath();
-      ctx.ellipse(p.x + 1, p.y + 1.5, p.rx, p.ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#e0f2fe';
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, p.rx * 0.88, p.ry * 0.82, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /** @private */
-  _drawCavePillar(ctx, isLeft) {
-    ctx.save();
-    if (!isLeft) {
-      ctx.translate(CANVAS_W, 0);
-      ctx.scale(-1, 1);
-    }
-
-    // Outer dark glacial arch
-    ctx.beginPath();
-    ctx.moveTo(0, CAVE_TOP);
-    ctx.lineTo(74, CAVE_TOP);
-    ctx.bezierCurveTo(46, CAVE_TOP + 36, 36, CAVE_TOP + 108, 58, FLOOR_Y + 6);
-    ctx.lineTo(0, FLOOR_Y + 6);
-    ctx.closePath();
-
-    const pGrad = ctx.createLinearGradient(0, CAVE_TOP, 72, CAVE_TOP);
-    pGrad.addColorStop(0, '#07172b');
-    pGrad.addColorStop(0.55, '#12345c');
-    pGrad.addColorStop(0.85, '#25639c');
-    pGrad.addColorStop(1, '#7dd3fc');
-    ctx.fillStyle = pGrad;
-    ctx.fill();
-
-    // Inner specular ice rim
-    ctx.beginPath();
-    ctx.moveTo(72, CAVE_TOP);
-    ctx.bezierCurveTo(44, CAVE_TOP + 36, 34, CAVE_TOP + 108, 56, FLOOR_Y + 4);
-    ctx.strokeStyle = 'rgba(224, 242, 254, 0.55)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Hanging stalactite icicles at arch shoulder
-    const icicles = [
-      { x: 40, len: 36, w: 10 },
-      { x: 56, len: 26, w: 8 },
-      { x: 72, len: 18, w: 6 },
-    ];
-    for (let i = 0; i < icicles.length; i += 1) {
-      const ic = icicles[i];
-      this._draw3DIcicle(ctx, ic.x, CAVE_TOP, ic.w, ic.len);
-    }
-
-    ctx.restore();
-  }
-
-  /** @private */
-  _draw3DIcicle(ctx, x, y, width, length) {
-    const hw = width / 2;
-    ctx.beginPath();
-    ctx.moveTo(x - hw, y);
-    ctx.quadraticCurveTo(x - hw * 0.55, y + length * 0.55, x, y + length);
-    ctx.quadraticCurveTo(x + hw * 0.55, y + length * 0.55, x + hw, y);
-    ctx.closePath();
-
-    const grad = ctx.createLinearGradient(x - hw, y, x + hw, y);
-    grad.addColorStop(0, '#f0f9ff');
-    grad.addColorStop(0.35, '#bae6fd');
-    grad.addColorStop(0.75, '#38bdf8');
-    grad.addColorStop(1, '#0369a1');
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // Crisp specular edge
-    ctx.beginPath();
-    ctx.moveTo(x - hw * 0.45, y + 1);
-    ctx.lineTo(x - hw * 0.1, y + length * 0.72);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-    ctx.lineWidth = 1.1;
-    ctx.stroke();
   }
 
   /** @private */
@@ -1053,267 +1740,272 @@ export class PenguinArena {
     if (this._canvas) {
       this._canvas.setAttribute(
         'aria-label',
-        `Isrampe med ${remaining} av ${total} pingviner trygge. ${eaten} pingviner er spist av isbjørnen i ishulen.`
+        `Isbro med ${remaining} av ${total} pingviner trygge. ${eaten} pingviner er spist av isbjørnen i ishulen.`
       );
     }
   }
 
   /* ------------------------------------------------------------------------
-     Particle & Effect Emitters
+     Particle emitters
      ------------------------------------------------------------------------ */
 
   /** @private */
+  _addParticle(p) {
+    if (this._particles.length < 420) this._particles.push(p);
+  }
+
+  /** @private */
   _spawnIceShards(x, y) {
-    const colors = ['#ffffff', '#e0f2fe', '#7dd3fc', '#38bdf8', '#bae6fd'];
-    for (let i = 0; i < 18; i += 1) {
-      const spread = (seededRand(i * 5 + this._elapsed * 13) - 0.5) * 190;
-      this._particles.push({
+    const colors = [P[13], P[12], P[11], P[10], P[9]];
+    for (let i = 0; i < 16; i += 1) {
+      this._addParticle({
         kind: 'shard',
-        x: x + (seededRand(i * 3 + 1) - 0.5) * 34,
-        y: y + (seededRand(i * 3 + 2) - 0.5) * 8,
-        vx: spread,
-        vy: -40 - seededRand(i * 7 + 2) * 90,
-        gravity: 460,
-        rot: seededRand(i * 9) * Math.PI * 2,
-        rotSpeed: (seededRand(i * 11) - 0.5) * 14,
-        size: 3 + seededRand(i * 13) * 4.5,
-        life: 0.55 + seededRand(i * 5 + 3) * 0.35,
-        maxLife: 0.9,
-        color: colors[i % colors.length],
+        x: x + (Math.random() - 0.5) * 22,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 120,
+        vy: -30 - Math.random() * 60,
+        g: 300,
+        rot: Math.random() * Math.PI * 2,
+        rs: (Math.random() - 0.5) * 14,
+        life: 0.6 + Math.random() * 0.4,
+        max: 1,
+        c: colors[i % colors.length],
       });
     }
   }
 
   /** @private */
-  _spawnSweatBurst(x, y) {
-    for (let i = 0; i < 5; i += 1) {
+  _spawnSweat(x, y) {
+    for (let i = 0; i < 4; i += 1) {
       const side = i % 2 === 0 ? -1 : 1;
-      this._particles.push({
-        kind: 'droplet',
-        x: x + side * (12 + i * 2),
-        y: y - 4,
-        vx: side * (36 + i * 14),
-        vy: -55 - i * 12,
-        gravity: 260,
-        size: 2.6,
-        life: 0.42,
-        maxLife: 0.42,
-        color: '#bae6fd',
-      });
+      this._addParticle({ kind: 'drop', x: x + side * 7, y, vx: side * (22 + i * 8), vy: -36 - i * 8, g: 180, life: 0.4, max: 0.4, c: P[11] });
     }
   }
 
   /** @private */
-  _spawnSnowSpray(x, y, dir, count = 8) {
+  _spawnSnow(x, y, dir, count, spread = 1) {
     for (let i = 0; i < count; i += 1) {
-      const r = seededRand(i * 17 + this._elapsed * 29);
-      this._particles.push({
-        kind: 'snowPuff',
-        x: x + (r - 0.5) * 18,
-        y: y - 2 - r * 6,
-        vx: dir * (45 + r * 95) + (seededRand(i * 7) - 0.5) * 30,
-        vy: -38 - seededRand(i * 13 + 2) * 68,
-        gravity: 195,
-        size: 3.5 + seededRand(i * 19) * 5.5,
-        life: 0.38 + r * 0.28,
-        maxLife: 0.66,
-        color: i % 2 === 0 ? '#ffffff' : '#e0f2fe',
+      const r = Math.random();
+      this._addParticle({
+        kind: 'snow',
+        x: x + (r - 0.5) * 10,
+        y: y - 1 - r * 3,
+        vx: dir * (26 + r * 55) * spread + (Math.random() - 0.5) * 22,
+        vy: -24 - Math.random() * 42,
+        g: 150,
+        size: Math.random() < 0.35 ? 2 : 1,
+        life: 0.35 + r * 0.3,
+        max: 0.65,
+        c: Math.random() < 0.6 ? P[13] : P[11],
+        floor: FLOOR_Y + 2,
       });
     }
   }
 
   /** @private */
   _spawnLandingSplash(x, y) {
-    for (let i = 0; i < 16; i += 1) {
+    for (let i = 0; i < 18; i += 1) {
       const side = i % 2 === 0 ? 1 : -1;
-      const r = seededRand(i * 11 + this._elapsed * 23);
-      this._particles.push({
-        kind: 'snowPuff',
-        x: x + side * (4 + r * 14),
-        y: y - 2,
-        vx: side * (35 + r * 95),
-        vy: -45 - r * 85,
-        gravity: 240,
-        size: 3.5 + r * 5,
-        life: 0.42 + r * 0.26,
-        maxLife: 0.68,
-        color: i % 3 === 0 ? '#bae6fd' : '#ffffff',
+      const r = Math.random();
+      this._addParticle({
+        kind: 'snow',
+        x: x + side * (2 + r * 8),
+        y: y - 1,
+        vx: side * (20 + r * 60),
+        vy: -30 - r * 55,
+        g: 170,
+        size: r < 0.4 ? 2 : 1,
+        life: 0.4 + r * 0.3,
+        max: 0.7,
+        c: i % 3 === 0 ? P[11] : P[13],
+        floor: FLOOR_Y + 2,
       });
+    }
+    for (let i = 0; i < 3; i += 1) {
+      this._addParticle({ kind: 'puff', x: x + (i - 1) * 6, y: y - 2, vx: (i - 1) * 14, vy: -6, g: 0, r: 2, gr: 5, life: 0.5, max: 0.5, c: P[12] });
     }
   }
 
   /** @private */
   _spawnChompBurst(x, y) {
-    // Billowing snow powder
-    for (let i = 0; i < 18; i += 1) {
-      const angle = seededRand(i * 7 + this._elapsed * 19) * Math.PI * 2;
-      const speed = 45 + seededRand(i * 13) * 120;
-      this._particles.push({
-        kind: 'snowPuff',
+    for (let i = 0; i < 20; i += 1) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 25 + Math.random() * 75;
+      this._addParticle({
+        kind: 'snow',
         x,
         y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed * 0.7 - 48,
-        gravity: 200,
-        size: 4 + seededRand(i * 5) * 6,
-        life: 0.48 + seededRand(i * 3) * 0.3,
-        maxLife: 0.78,
-        color: i % 3 === 0 ? '#bae6fd' : '#ffffff',
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp * 0.7 - 30,
+        g: 140,
+        size: Math.random() < 0.5 ? 2 : 1,
+        life: 0.5 + Math.random() * 0.3,
+        max: 0.8,
+        c: i % 3 === 0 ? P[11] : P[13],
+        floor: FLOOR_Y + 2,
       });
     }
-    // Floating Emperor penguin feathers (dark charcoal, white, golden amber)
-    const featherColors = ['#0f172a', '#ffffff', '#f59e0b', '#334155', '#fef3c7'];
-    for (let i = 0; i < 10; i += 1) {
-      const angle = -Math.PI * 0.15 - seededRand(i * 17 + 3) * Math.PI * 0.7;
-      const speed = 55 + seededRand(i * 19) * 90;
-      this._particles.push({
+    const fc = [P[43], P[13], P[48], P[45], P[50]];
+    for (let i = 0; i < 12; i += 1) {
+      const ang = -Math.PI * 0.15 - Math.random() * Math.PI * 0.7;
+      const sp = 30 + Math.random() * 55;
+      this._addParticle({
         kind: 'feather',
-        x: x + (seededRand(i * 3) - 0.5) * 20,
-        y: y - 10,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 35,
-        gravity: 52,
-        rot: seededRand(i * 23) * Math.PI * 2,
-        rotSpeed: (seededRand(i * 29) - 0.5) * 6,
-        swayPhase: seededRand(i * 31) * Math.PI * 2,
-        size: 5 + seededRand(i * 7) * 3,
-        life: 1.1 + seededRand(i * 11) * 0.55,
-        maxLife: 1.65,
-        color: featherColors[i % featherColors.length],
+        x: x + (Math.random() - 0.5) * 12,
+        y: y - 6,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 20,
+        g: 32,
+        sway: Math.random() * Math.PI * 2,
+        life: 1.2 + Math.random() * 0.6,
+        max: 1.8,
+        c: fc[i % fc.length],
+      });
+    }
+    for (let i = 0; i < 4; i += 1) {
+      this._addParticle({ kind: 'puff', x: x + (i - 1.5) * 6, y: y + 4, vx: (i - 1.5) * 16, vy: -10, g: 0, r: 3, gr: 7, life: 0.6, max: 0.6, c: P[12] });
+    }
+  }
+
+  /** @private */
+  _spawnSparkles(x, y) {
+    const colors = [P[49], P[13], P[18], P[28]];
+    for (let i = 0; i < 5; i += 1) {
+      this._addParticle({
+        kind: 'spark',
+        x: x + (Math.random() - 0.5) * 18,
+        y: y + (Math.random() - 0.5) * 8,
+        vx: (Math.random() - 0.5) * 22,
+        vy: -18 - Math.random() * 26,
+        g: 14,
+        life: 0.6 + Math.random() * 0.35,
+        max: 0.95,
+        c: colors[i % colors.length],
       });
     }
   }
 
   /** @private */
-  _spawnCheerSparkles(x, y) {
-    const colors = ['#fde047', '#ffffff', '#7dd3fc', '#fbbf24'];
-    for (let i = 0; i < 6; i += 1) {
-      const r = seededRand(i * 13 + x + this._elapsed * 11);
-      this._particles.push({
-        kind: 'sparkle',
-        x: x + (r - 0.5) * 28,
-        y: y + (seededRand(i * 17) - 0.5) * 14,
-        vx: (r - 0.5) * 36,
-        vy: -32 - seededRand(i * 19) * 44,
-        gravity: 20,
-        size: 3 + seededRand(i * 7) * 3,
-        life: 0.6 + r * 0.35,
-        maxLife: 0.95,
-        color: colors[i % colors.length],
-      });
-    }
+  _bearNose() {
+    const b = this._bear;
+    return { x: b.x + b.dir * (44 + b.lunge), y: FLOOR_Y - 23 + b.yOffset + b.headPitch * 14 };
   }
 
   /** @private */
-  _spawnBreathCloud(heavy = false) {
-    const bear = this._bear;
-    const noseX = bear.x + bear.dir * 66;
-    const noseY = FLOOR_Y - 56 + bear.headPitch * 14;
+  _spawnBreath(heavy = false) {
+    const b = this._bear;
+    const n = this._bearNose();
     const count = heavy ? 4 : 2;
     for (let i = 0; i < count; i += 1) {
-      this._breathClouds.push({
-        x: noseX + bear.dir * (4 + i * 5),
-        y: noseY + (i - 0.5) * 3,
-        vx: bear.dir * (heavy ? 36 + i * 10 : 16 + i * 6),
-        vy: -14 - i * 4,
-        r: heavy ? 6 + i * 2.5 : 4.5 + i * 2,
-        life: heavy ? 1.15 : 0.95,
-        maxLife: heavy ? 1.15 : 0.95,
+      this._addParticle({
+        kind: 'puff',
+        x: n.x + b.dir * (2 + i * 3),
+        y: n.y + (i - 0.5) * 2,
+        vx: b.dir * (heavy ? 26 + i * 8 : 10 + i * 4),
+        vy: -6 - i * 3,
+        g: 0,
+        r: heavy ? 2 : 1.2,
+        gr: heavy ? 6 : 4,
+        life: heavy ? 1.1 : 0.95,
+        max: heavy ? 1.1 : 0.95,
+        c: P[12],
       });
     }
   }
 
   /* ------------------------------------------------------------------------
-     Animation Loop & Physics Update
+     Animation loop & simulation
      ------------------------------------------------------------------------ */
 
   /** @private */
   _startLoop() {
     if (typeof requestAnimationFrame !== 'function') return;
     this._lastFrameTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
-
     const tick = (now) => {
       if (this._destroyed) return;
       const dt = Math.min(0.05, Math.max(0.001, (now - this._lastFrameTime) / 1000));
       this._lastFrameTime = now;
-
       if (!prefersReducedMotion()) {
         this._update(dt);
         this._render();
       }
       this._rafId = requestAnimationFrame(tick);
     };
-
     this._rafId = requestAnimationFrame(tick);
   }
 
   /** @private */
   _update(dt) {
+    dt = Math.min(0.05, dt);
     this._elapsed += dt;
+    const t = this._elapsed;
 
-    // Camera shake decay
-    if (this._shakeTimer > 0) {
-      this._shakeTimer = Math.max(0, this._shakeTimer - dt);
-    }
+    if (this._shakeTimer > 0) this._shakeTimer = Math.max(0, this._shakeTimer - dt);
+    if (this._screenFlash > 0) this._screenFlash = Math.max(0, this._screenFlash - dt);
 
-    // Snowfall update
-    for (let i = 0; i < this._snowflakes.length; i += 1) {
-      const f = this._snowflakes[i];
+    // Snowfall
+    for (let i = 0; i < this._flakes.length; i += 1) {
+      const f = this._flakes[i];
       f.y += f.speed * dt;
-      f.x += Math.sin(this._elapsed * 1.1 + f.phase) * f.drift * dt;
-      if (f.y > RAMP_Y + 26) {
-        f.y = -6;
-        f.x = seededRand(i * 19 + this._elapsed) * CANVAS_W;
+      f.x += Math.sin(t * 1.1 + f.phase) * f.drift * dt;
+      if (f.y > H + 2) {
+        f.y = -2;
+        f.x = Math.random() * W;
       }
-      if (f.x < -8) f.x = CANVAS_W + 8;
-      if (f.x > CANVAS_W + 8) f.x = -8;
+      if (f.x < -2) f.x = W + 2;
+      if (f.x > W + 2) f.x = -2;
     }
 
-    // Dripping water drops from icicles
-    for (let i = 0; i < this._waterDrops.length; i += 1) {
-      const d = this._waterDrops[i];
+    // Shooting star
+    const ss = this._shooting;
+    if (ss.active) {
+      ss.life -= dt;
+      ss.x += ss.vx * dt;
+      ss.y += ss.vy * dt;
+      if (ss.life <= 0) ss.active = false;
+    } else {
+      ss.cd -= dt;
+      if (ss.cd <= 0) {
+        ss.active = true;
+        ss.x = 40 + Math.random() * 300;
+        ss.y = 4 + Math.random() * 22;
+        ss.vx = 150 + Math.random() * 80;
+        ss.vy = 45 + Math.random() * 30;
+        ss.life = 0.55;
+        ss.cd = 7 + Math.random() * 9;
+      }
+    }
+
+    // Icicle drips
+    for (let i = 0; i < this._drips.length; i += 1) {
+      const d = this._drips[i];
       if (!d.active) {
-        d.cooldown -= dt;
-        if (d.cooldown <= 0) {
+        d.cd -= dt;
+        if (d.cd <= 0) {
           d.active = true;
-          d.y = CAVE_TOP + 12;
-          d.vy = 20;
+          d.y = d.y0;
+          d.vy = 8;
         }
       } else {
-        d.vy += 420 * dt;
+        d.vy += 380 * dt;
         d.y += d.vy * dt;
-        if (d.y >= FLOOR_Y) {
+        const floorY = floorSurface(d.x);
+        if (d.y >= floorY) {
           d.active = false;
-          d.cooldown = 2.8 + seededRand(i * 31 + this._elapsed * 7) * 5.2;
-          // Tiny water splash ring particles
+          d.cd = 2.5 + Math.random() * 5;
           for (let s = -1; s <= 1; s += 2) {
-            this._particles.push({
-              kind: 'droplet',
-              x: d.x,
-              y: FLOOR_Y - 1,
-              vx: s * 22,
-              vy: -32,
-              gravity: 220,
-              size: 1.6,
-              life: 0.24,
-              maxLife: 0.24,
-              color: '#bae6fd',
-            });
+            this._addParticle({ kind: 'drop', x: d.x, y: floorY - 1, vx: s * 16, vy: -26, g: 170, life: 0.25, max: 0.25, c: P[11] });
           }
         }
       }
     }
 
-    // Trapdoor spring physics (0° -> 92° with smooth bounce)
+    // Trapdoor spring physics
     for (let i = 0; i < this._trapdoors.length; i += 1) {
       const door = this._trapdoors[i];
-      if (door.crackGlow > 0) {
-        door.crackGlow = Math.max(0, door.crackGlow - dt * 2.2);
-      }
+      if (door.crackGlow > 0) door.crackGlow = Math.max(0, door.crackGlow - dt * 2.2);
       if (door.targetAngle > 0 && (Math.abs(door.angle - door.targetAngle) > 0.2 || Math.abs(door.vel) > 1)) {
-        const springK = 140;
-        const damping = 12;
-        const accel = (door.targetAngle - door.angle) * springK - door.vel * damping;
+        const accel = (door.targetAngle - door.angle) * 140 - door.vel * 12;
         door.vel += accel * dt;
         door.angle += door.vel * dt;
         if (door.angle < 0) {
@@ -1321,25 +2013,66 @@ export class PenguinArena {
           door.vel = 0;
         }
       }
+      if (door.snow && door.angle > 6) {
+        door.snow = false;
+        for (let k = 0; k < 10; k += 1) {
+          this._addParticle({
+            kind: 'snow',
+            x: door.x0 + Math.random() * door.w,
+            y: SNOW_Y + 1,
+            vx: (Math.random() - 0.5) * 30,
+            vy: -10 + Math.random() * 20,
+            g: 260,
+            size: Math.random() < 0.5 ? 2 : 1,
+            life: 0.9,
+            max: 0.9,
+            c: P[12],
+            floor: FLOOR_Y + 2,
+          });
+        }
+      }
     }
 
-    // Penguins update
+    // Penguins
+    const bear = this._bear;
+    const danger = bear.mode === 'watch' || bear.mode === 'sprint' || bear.mode.startsWith('chomp');
     for (let i = 0; i < this._penguins.length; i += 1) {
       const p = this._penguins[i];
       if (p.status === 'eaten') continue;
-
       p.breathPhase += dt * 2.4;
-      p.swayPhase += dt * 1.45;
+      p.swayPhase += dt * p.swaySpeed;
 
-      // Natural blinking
       if (p.blinkTimer > 0) {
         p.blinkTimer = Math.max(0, p.blinkTimer - dt);
       } else {
         p.blinkCooldown -= dt;
         if (p.blinkCooldown <= 0) {
-          p.blinkTimer = 0.13;
-          p.blinkCooldown = 2.0 + seededRand(i * 41 + this._elapsed * 3) * 4.2;
+          p.blinkTimer = 0.12;
+          p.blinkCooldown = 2 + Math.random() * 4.2;
         }
+      }
+
+      if (p.status === 'idle' || p.status === 'cheer') {
+        const dx = bear.x - p.x;
+        if (Math.abs(dx) > 30) p.facingDir = dx > 0 ? 1 : -1;
+        p.lookTimer -= dt;
+        if (p.lookTimer <= 0) {
+          const r = Math.random();
+          p.lookMode = r < 0.5 ? 0 : r < 0.75 ? 1 : 2;
+          p.lookTimer = 1.2 + Math.random() * 2.6;
+        }
+        let tTurn = p.lookMode === 1 ? 1 : 0;
+        let tPitch = p.lookMode === 2 ? 0.42 : 0;
+        if (danger && p.status === 'idle') {
+          tTurn = 0;
+          tPitch = 0.5;
+        }
+        if (p.status === 'cheer') {
+          tTurn = 0;
+          tPitch = -0.35;
+        }
+        p.turn = lerp(p.turn, tTurn, Math.min(1, dt * 10));
+        p.pitch = lerp(p.pitch, tPitch, Math.min(1, dt * 9));
       }
 
       if (p.status === 'cheer') {
@@ -1357,7 +2090,7 @@ export class PenguinArena {
         if (p.timer <= 0) {
           p.status = 'falling';
           p.timer = 0;
-          p.vy = 20;
+          p.vy = 12;
           p.rotSpeed = (p.index % 2 === 0 ? 1 : -1) * 5.8;
         }
       } else if (p.status === 'falling') {
@@ -1365,46 +2098,39 @@ export class PenguinArena {
         p.vy += GRAVITY * dt;
         p.y += p.vy * dt;
         p.rotation += p.rotSpeed * dt;
-
-        // Occasional falling feather trail
-        if (Math.random() < dt * 7) {
-          this._particles.push({
+        if (Math.random() < dt * 8) {
+          this._addParticle({
             kind: 'feather',
-            x: p.x + (Math.random() - 0.5) * 14,
-            y: p.y - 16,
-            vx: (Math.random() - 0.5) * 35,
-            vy: -20,
-            gravity: 40,
-            rot: Math.random() * Math.PI,
-            rotSpeed: (Math.random() - 0.5) * 5,
-            swayPhase: Math.random() * Math.PI * 2,
-            size: 4.2,
-            life: 0.75,
-            maxLife: 0.75,
-            color: Math.random() < 0.5 ? '#ffffff' : '#1e293b',
+            x: p.x + (Math.random() - 0.5) * 8,
+            y: p.y - 12,
+            vx: (Math.random() - 0.5) * 22,
+            vy: -14,
+            g: 26,
+            sway: Math.random() * Math.PI * 2,
+            life: 0.8,
+            max: 0.8,
+            c: Math.random() < 0.5 ? P[13] : P[44],
           });
         }
-
-        // Hit the snow floor!
         if (p.y >= FLOOR_Y) {
           p.y = FLOOR_Y;
           p.vy = 0;
           p.rotation = 0;
           p.status = 'landed';
           p.landedTimer = 0;
-          p.squashY = 0.72;
+          p.squashY = 0.7;
           this._spawnLandingSplash(p.x, FLOOR_Y);
+          this._shakeTimer = Math.max(this._shakeTimer, 0.08);
         }
       } else if (p.status === 'landed') {
         p.landedTimer += dt;
-        p.squashY = lerp(p.squashY, 1.0, Math.min(1, dt * 10));
+        p.squashY = lerp(p.squashY, 1, Math.min(1, dt * 10));
       }
     }
 
-    // Polar bear AI & kinematic animation update
     this._updatePolarBear(dt);
 
-    // Particles update
+    // Particles
     for (let i = this._particles.length - 1; i >= 0; i -= 1) {
       const pt = this._particles[i];
       pt.life -= dt;
@@ -1412,46 +2138,33 @@ export class PenguinArena {
         this._particles.splice(i, 1);
         continue;
       }
-      pt.vy += pt.gravity * dt;
+      pt.vy += pt.g * dt;
       pt.x += pt.vx * dt;
       pt.y += pt.vy * dt;
       if (pt.kind === 'feather') {
-        pt.x += Math.sin(this._elapsed * 5 + pt.swayPhase) * 24 * dt;
+        pt.x += Math.sin(t * 5 + pt.sway) * 16 * dt;
         pt.vx *= 0.96;
-        pt.rot += pt.rotSpeed * dt;
       } else if (pt.kind === 'shard') {
-        pt.rot += pt.rotSpeed * dt;
+        pt.rot += pt.rs * dt;
+      } else if (pt.kind === 'puff') {
+        pt.r += pt.gr * dt;
+        pt.vx *= 0.96;
+      }
+      if (pt.floor && pt.y > pt.floor) {
+        pt.y = pt.floor;
+        pt.vy = 0;
+        pt.vx *= 0.5;
       }
     }
 
-    // Breath clouds update
-    for (let i = this._breathClouds.length - 1; i >= 0; i -= 1) {
-      const bc = this._breathClouds[i];
-      bc.life -= dt;
-      if (bc.life <= 0) {
-        this._breathClouds.splice(i, 1);
-        continue;
-      }
-      bc.x += bc.vx * dt;
-      bc.y += bc.vy * dt;
-      bc.vx *= 0.96;
-      bc.r += dt * 7.5;
-    }
-
-    // Pawprints fade update
+    // Pawprints fade
     for (let i = this._pawprints.length - 1; i >= 0; i -= 1) {
-      const pp = this._pawprints[i];
-      pp.life -= dt;
-      if (pp.life <= 0) {
-        this._pawprints.splice(i, 1);
-      }
+      this._pawprints[i].life -= dt;
+      if (this._pawprints[i].life <= 0) this._pawprints.splice(i, 1);
     }
   }
 
-  /**
-   * Finds the next penguin waiting on the snow floor (`landed`) or currently falling/panicking.
-   * @private
-   */
+  /** @private */
   _findActiveDropTarget() {
     let landed = null;
     let airborne = null;
@@ -1461,9 +2174,7 @@ export class PenguinArena {
         landed = p;
         break;
       }
-      if ((p.status === 'falling' || p.status === 'panic') && !airborne) {
-        airborne = p;
-      }
+      if ((p.status === 'falling' || p.status === 'panic') && !airborne) airborne = p;
     }
     return { landed, airborne };
   }
@@ -1471,55 +2182,69 @@ export class PenguinArena {
   /** @private */
   _updatePolarBear(dt) {
     const bear = this._bear;
+    const t = this._elapsed;
 
-    // Timers
-    if (bear.hitFlashTimer > 0) {
-      bear.hitFlashTimer = Math.max(0, bear.hitFlashTimer - dt);
-    }
+    if (bear.hitFlashTimer > 0) bear.hitFlashTimer = Math.max(0, bear.hitFlashTimer - dt);
     if (bear.bubbleTimer > 0) {
       bear.bubbleTimer -= dt;
-      if (bear.bubbleTimer <= 0) {
-        bear.bubbleText = null;
-      }
+      if (bear.bubbleTimer <= 0) bear.bubbleText = null;
     }
     if (bear.pawStamp > 0) {
-      bear.pawStamp = Math.max(0, bear.pawStamp - dt * 2.6);
+      bear.pawStamp = Math.max(0, bear.pawStamp - dt * 2.4);
+      if (!bear.stompHit && bear.pawStamp < 0.55) {
+        bear.stompHit = true;
+        const px0 = bear.x + bear.dir * 21;
+        this._spawnSnow(px0, FLOOR_Y, bear.dir, 6);
+        this._spawnSnow(px0, FLOOR_Y, -bear.dir, 6);
+        this._addParticle({ kind: 'puff', x: px0, y: FLOOR_Y - 1, vx: 0, vy: -4, g: 0, r: 2, gr: 6, life: 0.45, max: 0.45, c: P[12] });
+        this._shakeTimer = Math.max(this._shakeTimer, 0.1);
+      }
     }
+    bear.lunge = lerp(bear.lunge, bear.mode === 'chompOpen' ? 3 : 0, Math.min(1, dt * 14));
 
-    // Natural blinking
+    // Blink, sniff, ear twitch
     if (bear.blinkTimer > 0) {
       bear.blinkTimer = Math.max(0, bear.blinkTimer - dt);
     } else {
       bear.blinkCooldown -= dt;
       if (bear.blinkCooldown <= 0) {
         bear.blinkTimer = 0.14;
-        bear.blinkCooldown = 2.4 + seededRand(this._elapsed * 11 + 5) * 3.6;
+        bear.blinkCooldown = 2.4 + Math.random() * 3.6;
       }
     }
+    bear.earTimer -= dt;
+    if (bear.earTimer <= 0) {
+      bear.ear = 1;
+      bear.earTimer = 2 + Math.random() * 4;
+    }
+    bear.ear = Math.max(0, bear.ear - dt * 6);
+    bear.sniffTimer -= dt;
+    if (bear.sniffTimer <= 0) {
+      bear.sniff = 1;
+      bear.sniffTimer = 3 + Math.random() * 4;
+    }
+    bear.sniff = Math.max(0, bear.sniff - dt * 1.4);
 
-    // Cold cave misty breath puffs while standing/watching
     if (bear.mode === 'wait' || bear.mode === 'watch') {
       bear.breathTimer -= dt;
       if (bear.breathTimer <= 0) {
-        this._spawnBreathCloud(false);
-        bear.breathTimer = bear.mode === 'watch' ? 1.1 : 2.3;
+        this._spawnBreath(false);
+        bear.breathTimer = bear.mode === 'watch' ? 1.1 : 2.2;
       }
     }
 
     const { landed, airborne } = this._findActiveDropTarget();
 
-    // State machine: STAND STILL & WAIT -> WATCH FALL -> SPRINT AFTER LANDING -> CHOMP -> STAND STILL & WAIT
     if (bear.mode === 'wait') {
       bear.yOffset = lerp(bear.yOffset, 0, Math.min(1, dt * 8));
       bear.jawOpen = lerp(bear.jawOpen, 0, Math.min(1, dt * 10));
       bear.tongueOut = lerp(bear.tongueOut, 0, Math.min(1, dt * 10));
-      bear.headPitch = lerp(bear.headPitch, -0.24 + Math.sin(this._elapsed * 1.3) * 0.04, Math.min(1, dt * 5));
+      const sniffNod = bear.sniff > 0 ? Math.sin(bear.sniff * Math.PI * 4) * 0.08 : 0;
+      bear.headPitch = lerp(bear.headPitch, -0.2 + Math.sin(t * 1.3) * 0.04 + sniffNod, Math.min(1, dt * 6));
       this._aimBearTowardRemaining();
-
       if (landed) {
-        if (landed.landedTimer >= 0.14) {
-          this._beginBearSprint(landed);
-        } else {
+        if (landed.landedTimer >= 0.14) this._beginBearSprint(landed);
+        else {
           bear.mode = 'watch';
           bear.targetIndex = landed.index;
           bear.targetX = landed.x;
@@ -1530,28 +2255,20 @@ export class PenguinArena {
         bear.targetX = airborne.x;
       }
     } else if (bear.mode === 'watch') {
-      // Stand still and look up eagerly while the penguin falls!
       const focus = landed || airborne;
       if (!focus) {
         bear.mode = 'wait';
       } else {
         bear.targetIndex = focus.index;
         bear.targetX = focus.x;
-        if (Math.abs(focus.x - bear.x) > 10) {
-          bear.dir = focus.x >= bear.x ? 1 : -1;
-        }
-        // Track vertical position of falling penguin smoothly
-        const dy = focus.y - (FLOOR_Y - 52);
-        const dx = Math.max(40, Math.abs(focus.x - bear.x));
-        const desiredPitch = clamp(Math.atan2(dy, dx) * 0.6, -0.45, 0.12);
-        bear.headPitch = lerp(bear.headPitch, desiredPitch, Math.min(1, dt * 10));
-        bear.jawOpen = lerp(bear.jawOpen, 0.24, Math.min(1, dt * 6));
-        bear.yOffset = lerp(bear.yOffset, 2.5, Math.min(1, dt * 8)); // slight crouch anticipation
-
-        // ONLY start sprinting AFTER the penguin has hit the ground (with 140ms landing splash beat)!
-        if (landed && landed.landedTimer >= 0.14) {
-          this._beginBearSprint(landed);
-        }
+        if (Math.abs(focus.x - bear.x) > 10) bear.dir = focus.x >= bear.x ? 1 : -1;
+        const dy = focus.y - 14 - (FLOOR_Y - 26);
+        const dx = Math.max(24, Math.abs(focus.x - bear.x) - 30);
+        const desired = clamp(Math.atan2(dy, dx) * 0.75, -0.62, 0.15);
+        bear.headPitch = lerp(bear.headPitch, desired, Math.min(1, dt * 10));
+        bear.jawOpen = lerp(bear.jawOpen, 0.2, Math.min(1, dt * 6));
+        bear.yOffset = lerp(bear.yOffset, 1.4, Math.min(1, dt * 8));
+        if (landed && landed.landedTimer >= 0.14) this._beginBearSprint(landed);
       }
     } else if (bear.mode === 'sprint') {
       const target = (bear.targetIndex !== null ? this._penguins[bear.targetIndex] : null) || landed;
@@ -1559,73 +2276,55 @@ export class PenguinArena {
         bear.mode = 'wait';
         return;
       }
-
-      const stopDist = 56;
+      const stopDist = 44;
       const dx = target.x - bear.x;
       const dist = Math.abs(dx);
       bear.dir = dx >= 0 ? 1 : -1;
-
-      const sprintSpeed = 420; // powerful bounding gallop across 800px cave
       bear.stridePhase += dt * 13.5;
-      bear.headPitch = lerp(bear.headPitch, 0.12, Math.min(1, dt * 10));
-      bear.jawOpen = lerp(bear.jawOpen, 0.52, Math.min(1, dt * 8));
-      bear.yOffset = -Math.abs(Math.sin(bear.stridePhase)) * 6.5;
+      bear.headPitch = lerp(bear.headPitch, 0.1, Math.min(1, dt * 10));
+      bear.jawOpen = lerp(bear.jawOpen, 0.45, Math.min(1, dt * 8));
 
-      // Snow spray & pawprints during gallop
       bear.dustTimer -= dt;
       if (bear.dustTimer <= 0) {
-        this._spawnSnowSpray(bear.x - bear.dir * 32, FLOOR_Y, -bear.dir, 5);
+        this._spawnSnow(bear.x - bear.dir * 20, FLOOR_Y, -bear.dir, 4);
         bear.dustTimer = 0.085;
       }
       bear.pawprintCooldown -= dt;
       if (bear.pawprintCooldown <= 0) {
-        this._pawprints.push({
-          x: bear.x - bear.dir * 20,
-          y: FLOOR_Y + 4 + (Math.random() - 0.5) * 4,
-          life: 4.5,
-          maxLife: 4.5,
-        });
-        bear.pawprintCooldown = 0.13;
+        bear.pawSide = 1 - bear.pawSide;
+        this._pawprints.push({ x: Math.round(bear.x - bear.dir * 14), y: FLOOR_Y + 2 + bear.pawSide * 2, life: 5, max: 5 });
+        bear.pawprintCooldown = 0.12;
       }
 
       if (dist <= stopDist) {
-        // Reached the fallen penguin -> lunge & chomp!
         bear.mode = 'chompOpen';
         bear.modeTimer = 0.16;
         bear.targetIndex = target.index;
       } else {
-        const step = Math.min(dist - stopDist + 2, sprintSpeed * dt);
-        bear.x = clamp(bear.x + bear.dir * step, 86, CANVAS_W - 86);
+        const step = Math.min(dist - stopDist + 1, 250 * dt);
+        bear.x = clamp(bear.x + bear.dir * step, 50, W - 50);
       }
     } else if (bear.mode === 'chompOpen') {
       bear.modeTimer -= dt;
-      bear.headPitch = lerp(bear.headPitch, 0.24, Math.min(1, dt * 16));
-      bear.jawOpen = lerp(bear.jawOpen, 1.0, Math.min(1, dt * 22));
-      bear.yOffset = lerp(bear.yOffset, -5, Math.min(1, dt * 14));
-
+      bear.headPitch = lerp(bear.headPitch, 0.26, Math.min(1, dt * 16));
+      bear.jawOpen = lerp(bear.jawOpen, 1, Math.min(1, dt * 22));
+      bear.yOffset = lerp(bear.yOffset, -2, Math.min(1, dt * 14));
       if (bear.modeTimer <= 0) {
-        // SNAP! Penguin is eaten!
         const target = bear.targetIndex !== null ? this._penguins[bear.targetIndex] : null;
-        const burstX = target ? target.x : bear.x + bear.dir * 54;
-        if (target && target.status !== 'eaten') {
-          target.status = 'eaten';
-        }
+        const burstX = target ? target.x : bear.x + bear.dir * 44;
+        if (target && target.status !== 'eaten') target.status = 'eaten';
         bear.mode = 'chompSnap';
         bear.modeTimer = 0.18;
-        bear.hitFlashTimer = 0.12;
-        bear.bubbleText = 'NOM!';
-        bear.bubbleColor = '#be123c';
-        bear.bubbleBg = '#fff1f2';
-        bear.bubbleTimer = 1.15;
-        bear.bubbleJagged = false;
-        this._shakeTimer = 0.26;
-        this._shakeIntensity = 6.5;
-        this._spawnChompBurst(burstX, FLOOR_Y - 16);
+        bear.hitFlashTimer = 0.07;
+        this._screenFlash = 0.05;
+        this._setBubble('NOM!', 1.15);
+        this._shakeTimer = 0.28;
+        this._spawnChompBurst(burstX, FLOOR_Y - 10);
       }
     } else if (bear.mode === 'chompSnap') {
       bear.modeTimer -= dt;
-      bear.jawOpen = lerp(bear.jawOpen, 0.02, Math.min(1, dt * 28));
-      bear.yOffset = lerp(bear.yOffset, 3, Math.min(1, dt * 18));
+      bear.jawOpen = lerp(bear.jawOpen, 0, Math.min(1, dt * 28));
+      bear.yOffset = lerp(bear.yOffset, 1.5, Math.min(1, dt * 18));
       if (bear.modeTimer <= 0) {
         bear.mode = 'chompChew';
         bear.modeTimer = 0.56;
@@ -1633,7 +2332,7 @@ export class PenguinArena {
     } else if (bear.mode === 'chompChew') {
       bear.modeTimer -= dt;
       bear.headPitch = lerp(bear.headPitch, 0.04, Math.min(1, dt * 8));
-      bear.jawOpen = 0.06 + Math.abs(Math.sin(this._elapsed * 18)) * 0.26;
+      bear.jawOpen = 0.05 + (Math.floor(t * 9) % 2) * 0.28;
       bear.yOffset = lerp(bear.yOffset, 0, Math.min(1, dt * 10));
       if (bear.modeTimer <= 0) {
         bear.mode = 'chompLick';
@@ -1642,14 +2341,12 @@ export class PenguinArena {
     } else if (bear.mode === 'chompLick') {
       bear.modeTimer -= dt;
       bear.jawOpen = lerp(bear.jawOpen, 0.22, Math.min(1, dt * 12));
-      bear.tongueOut = Math.sin((1 - bear.modeTimer / 0.42) * Math.PI);
+      bear.tongueOut = Math.sin(clamp(1 - bear.modeTimer / 0.42, 0, 1) * Math.PI);
       if (bear.modeTimer <= 0) {
         bear.tongueOut = 0;
         bear.jawOpen = 0;
         bear.targetIndex = null;
         bear.targetX = null;
-
-        // Check if another penguin already landed or is falling; otherwise stand still & wait!
         const next = this._findActiveDropTarget();
         if (next.landed) {
           this._beginBearSprint(next.landed);
@@ -1665,9 +2362,9 @@ export class PenguinArena {
       }
     } else if (bear.mode === 'grumble') {
       bear.modeTimer -= dt;
-      bear.headPitch = lerp(bear.headPitch, 0.2, Math.min(1, dt * 10));
-      bear.jawOpen = lerp(bear.jawOpen, 0.14 + Math.abs(Math.sin(this._elapsed * 14)) * 0.1, Math.min(1, dt * 10));
-      bear.yOffset = Math.sin(this._elapsed * 22) * 1.2;
+      bear.headPitch = lerp(bear.headPitch, 0.18, Math.min(1, dt * 10));
+      bear.jawOpen = lerp(bear.jawOpen, 0.12 + (Math.floor(t * 14) % 2) * 0.12, Math.min(1, dt * 12));
+      bear.yOffset = Math.floor(t * 22) % 2 ? 0.6 : 0;
       if (bear.modeTimer <= 0) {
         bear.mode = 'wait';
         bear.jawOpen = 0;
@@ -1677,1336 +2374,548 @@ export class PenguinArena {
   }
 
   /** @private */
-  _beginBearSprint(targetPenguin) {
+  _beginBearSprint(target) {
     const bear = this._bear;
     bear.mode = 'sprint';
-    bear.targetIndex = targetPenguin.index;
-    bear.targetX = targetPenguin.x;
-    bear.dir = targetPenguin.x >= bear.x ? 1 : -1;
+    bear.targetIndex = target.index;
+    bear.targetX = target.x;
+    bear.dir = target.x >= bear.x ? 1 : -1;
     bear.bubbleText = null;
     bear.dustTimer = 0;
     bear.pawprintCooldown = 0;
-    this._spawnSnowSpray(bear.x - bear.dir * 26, FLOOR_Y, -bear.dir, 8);
+    this._spawnSnow(bear.x - bear.dir * 18, FLOOR_Y, -bear.dir, 8);
   }
 
   /* ------------------------------------------------------------------------
-     Main HD Render Pipeline (800 × 360 Logical Space, DPR Scaled)
+     Rendering
      ------------------------------------------------------------------------ */
 
   /** @private */
   _render() {
-    const ctx = this._ctx;
-    if (!ctx) return;
+    const fb = this._fb;
+    const t = this._elapsed;
+    const S = this._static;
 
-    ctx.save();
-    ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-    ctx.imageSmoothingEnabled = true;
+    // 1. Static backdrop
+    fb.set(S.bg);
 
-    // Camera impact shake on chomp
-    if (this._shakeTimer > 0) {
-      const mag = (this._shakeTimer / 0.26) * this._shakeIntensity;
-      const sx = (Math.random() - 0.5) * 2 * mag;
-      const sy = (Math.random() - 0.5) * 2 * mag;
-      ctx.translate(sx, sy);
+    // 2. Sky life: stars, shooting star, aurora (masked to open sky)
+    this._drawSky(fb, t);
+
+    // 3. Far snow
+    this._drawSnow(fb, 0);
+
+    // 4. Floor details & shadows
+    this._drawPawprints(fb);
+    this._drawBearShadow(fb);
+
+    // 5. Bridge, trapdoors, lanterns
+    this._drawBridge(fb, t);
+
+    // 6. Mid snow & drips
+    this._drawSnow(fb, 1);
+    this._drawDrips(fb);
+
+    // 7. Characters
+    this._drawPenguins(fb, t);
+    this._drawBear(fb, t);
+
+    // 8. Particles
+    this._drawParticles(fb);
+
+    // 9. Lighting passes
+    this._drawLighting(fb, t);
+
+    // 10. Foreground silhouettes & near snow
+    const fg = S.fg;
+    for (let i = 160 * W; i < W * H; i += 1) {
+      if (fg[i]) fb[i] = fg[i];
+    }
+    this._drawSnow(fb, 2);
+
+    // 11. Vignette
+    const vig = S.vig;
+    for (let i = 0; i < vig.length; i += 1) {
+      const c = MAP_DARK.get(fb[vig[i]]);
+      if (c !== undefined) fb[vig[i]] = c;
     }
 
-    // 1. Cached static Arctic sky, crescent moon, glaciers, ice cave & snow floor
-    if (this._bgCache) {
-      ctx.drawImage(this._bgCache, 0, 0, CANVAS_W, CANVAS_H);
-    } else {
-      ctx.fillStyle = '#040b18';
-      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+    // 12. Hit flash (one frame of moonlight wash)
+    if (this._screenFlash > 0) {
+      for (let i = 0; i < fb.length; i += 2) {
+        const c = MAP_MOON.get(fb[i]);
+        if (c !== undefined) fb[i] = c;
+      }
     }
 
-    // 2. Animated twinkling stars & translucent Aurora Borealis ribbons
-    this._drawStars(ctx);
-    this._drawAurora(ctx);
+    // 13. UI badges
+    this._drawBadges(fb, t);
 
-    // 3. Far & mid snowfall (behind ramp/penguins)
-    this._drawSnowfall(ctx, 0, 1);
-
-    // 4. Glowing turquoise cave crystals & twinkling frost motes
-    this._drawGlowingCrystals(ctx);
-    this._drawFrostMotes(ctx);
-
-    // 5. Fading snowy pawprints & dripping icicle droplets
-    this._drawPawprints(ctx);
-    this._drawWaterDrops(ctx);
-
-    // 6. Crystalline ice ramp, snow blanket, hanging icicles, trapdoors & warm lanterns
-    this._drawIceRampAndTrapdoors(ctx);
-    this._drawLanternPosts(ctx);
-
-    // 7. Anatomically realistic Emperor penguins (standing, cheering, panicking, falling, landed)
-    this._drawPenguins(ctx);
-
-    // 8. Anatomically realistic articulated Polar Bear + misty breath clouds
-    this._drawPolarBear(ctx);
-    this._drawBreathClouds(ctx);
-
-    // 9. Particles (ice shards, snow puffs, feathers, sparkles)
-    this._drawParticles(ctx);
-
-    // 10. Foreground bokeh snowfall & warm lantern radial light halos
-    this._drawSnowfall(ctx, 2, 2);
-    this._drawLanternGlows(ctx);
-
-    // 11. Styled comic callout badge ("NOM!" / "Grrr...")
-    this._drawCalloutBadge(ctx);
-
-    ctx.restore();
+    this._present();
   }
 
   /** @private */
-  _drawStars(ctx) {
+  _present() {
+    if (!this._ctx || !this._lowCtx || !this._img) return;
+    this._lowCtx.putImageData(this._img, 0, 0);
+    let sx = 0;
+    let sy = 0;
+    if (this._shakeTimer > 0) {
+      const mag = Math.ceil((this._shakeTimer / 0.28) * 3);
+      sx = Math.round((Math.random() * 2 - 1) * mag);
+      sy = Math.round((Math.random() * 2 - 1) * mag);
+    }
+    const ctx = this._ctx;
+    ctx.imageSmoothingEnabled = false;
+    if (sx || sy) {
+      ctx.fillStyle = '#05060f';
+      ctx.fillRect(0, 0, W * SCALE, H * SCALE);
+    }
+    ctx.drawImage(this._low, sx * SCALE, sy * SCALE, W * SCALE, H * SCALE);
+  }
+
+  /** @private */
+  _drawSky(fb, t) {
+    const mask = this._static.mask;
+    // Stars
     for (let i = 0; i < this._stars.length; i += 1) {
       const s = this._stars[i];
-      const twinkle = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(this._elapsed * s.speed + s.phase));
-      ctx.fillStyle = `rgba(224, 242, 254, ${twinkle.toFixed(2)})`;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /** @private */
-  _drawAurora(ctx) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-
-    const ribbons = [
-      { yBase: 38, amp: 14, freq: 0.0085, speed: 0.48, height: 56, c0: 'rgba(52, 211, 153, 0.22)', c1: 'rgba(56, 189, 248, 0.14)' },
-      { yBase: 54, amp: 11, freq: 0.011, speed: -0.36, height: 48, c0: 'rgba(45, 212, 191, 0.18)', c1: 'rgba(167, 139, 250, 0.13)' },
-    ];
-
-    for (let r = 0; r < ribbons.length; r += 1) {
-      const rb = ribbons[r];
-      const grad = ctx.createLinearGradient(0, rb.yBase - 14, 0, rb.yBase + rb.height);
-      grad.addColorStop(0, 'rgba(52, 211, 153, 0)');
-      grad.addColorStop(0.35, rb.c0);
-      grad.addColorStop(0.75, rb.c1);
-      grad.addColorStop(1, 'rgba(167, 139, 250, 0)');
-
-      ctx.beginPath();
-      ctx.moveTo(40, rb.yBase + rb.height);
-      for (let x = 40; x <= 740; x += 24) {
-        const y = rb.yBase + Math.sin(x * rb.freq + this._elapsed * rb.speed) * rb.amp
-          + Math.cos(x * rb.freq * 1.7 - this._elapsed * 0.3) * 5;
-        ctx.lineTo(x, y);
-      }
-      ctx.lineTo(740, rb.yBase + rb.height);
-      ctx.closePath();
-      ctx.fillStyle = grad;
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-
-  /** @private */
-  _drawSnowfall(ctx, minLayer, maxLayer) {
-    for (let i = 0; i < this._snowflakes.length; i += 1) {
-      const f = this._snowflakes[i];
-      if (f.layer < minLayer || f.layer > maxLayer) continue;
-
-      if (f.layer === 2) {
-        // Soft bokeh glow for near snowflakes
-        const grad = ctx.createRadialGradient(f.x, f.y, 0.2, f.x, f.y, f.r * 1.5);
-        grad.addColorStop(0, `rgba(255, 255, 255, ${f.alpha})`);
-        grad.addColorStop(1, 'rgba(224, 242, 254, 0)');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.r * 1.5, 0, Math.PI * 2);
-        ctx.fill();
+      const idx = s.y * W + s.x;
+      if (mask[idx] !== 1) continue;
+      const tw = 0.5 + 0.5 * Math.sin(t * s.speed + s.phase);
+      const v = s.b * 0.7 + tw * 0.3;
+      if (v > 0.86) {
+        fb[idx] = P[13];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const j = (s.y + dy) * W + s.x + dx;
+          if (s.y + dy >= 0 && mask[j] === 1) fb[j] = P[9];
+        }
       } else {
-        ctx.fillStyle = `rgba(240, 249, 255, ${f.alpha})`;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-        ctx.fill();
+        fb[idx] = v > 0.65 ? P[12] : v > 0.45 ? P[10] : v > 0.25 ? P[8] : P[6];
+      }
+    }
+
+    // Shooting star
+    const ss = this._shooting;
+    if (ss.active) {
+      const len = 12;
+      const nx = ss.vx / Math.hypot(ss.vx, ss.vy);
+      const ny = ss.vy / Math.hypot(ss.vx, ss.vy);
+      for (let k = 0; k < len; k += 1) {
+        const x = Math.round(ss.x - nx * k);
+        const y = Math.round(ss.y - ny * k);
+        if (x < 0 || y < 0 || x >= W || y >= H || mask[y * W + x] !== 1) continue;
+        if (k > 3 && bay(x, y) > (1 - k / len) * 16) continue;
+        fb[y * W + x] = k === 0 ? P[13] : k < 3 ? P[12] : k < 7 ? P[10] : P[8];
+      }
+    }
+
+    // Aurora ribbons with vertical light rays
+    const ribbons = [
+      { base: 30, amp: 7, f1: 0.017, f2: 0.043, s1: 0.32, s2: 0.21, x0: 0, x1: 300, k: 0 },
+      { base: 42, amp: 6, f1: 0.021, f2: 0.037, s1: 0.27, s2: 0.33, x0: 120, x1: 480, k: 1 },
+      { base: 22, amp: 5, f1: 0.025, f2: 0.051, s1: 0.4, s2: 0.18, x0: 230, x1: 480, k: 2 },
+    ];
+    for (const r of ribbons) {
+      const span = r.x1 - r.x0;
+      for (let x = r.x0; x < r.x1; x += 1) {
+        const edge = Math.sin((Math.PI * (x - r.x0)) / span);
+        const cy = r.base + r.amp * Math.sin(x * r.f1 + t * r.s1 + r.k) + r.amp * 0.5 * Math.sin(x * r.f2 - t * r.s2 + r.k * 2);
+        const I = edge * (0.5 + 0.5 * Math.sin(x * 0.06 + t * 0.8 + r.k * 2.3)) * 0.85;
+        if (I < 0.05) continue;
+        const ray = vnoise(x * 0.22 + t * 0.55 + r.k * 7);
+        const Lr = 8 + ray * 18;
+        const yb = Math.round(cy + 2);
+        const yt = Math.round(cy - Lr);
+        for (let y = Math.max(0, yt); y <= yb; y += 1) {
+          const idx = y * W + x;
+          if (mask[idx] !== 1) continue;
+          const f = (yb - y) / (yb - yt + 1);
+          const dens = I * (f < 0.15 ? 0.95 : (1 - f) * (0.45 + ray * 0.45));
+          if (bay(x, y) >= dens * 16) continue;
+          fb[idx] = f < 0.12 ? P[21] : f < 0.35 ? P[20] : f < 0.6 ? P[17] : f < 0.82 ? P[23] : P[22];
+        }
       }
     }
   }
 
   /** @private */
-  _drawGlowingCrystals(ctx) {
-    for (let i = 0; i < this._crystals.length; i += 1) {
-      const cr = this._crystals[i];
-      const pulse = 0.65 + 0.35 * Math.sin(this._elapsed * 1.9 + cr.phase);
-
-      ctx.save();
-      ctx.translate(cr.x, cr.y);
-      ctx.rotate(cr.angle);
-      ctx.scale(cr.scale, cr.scale);
-
-      // Soft turquoise bioluminescent glow
-      const glow = ctx.createRadialGradient(0, -10, 2, 0, -10, cr.bg ? 24 : 34);
-      glow.addColorStop(0, `rgba(34, 211, 238, ${(cr.bg ? 0.22 : 0.34) * pulse})`);
-      glow.addColorStop(1, 'rgba(34, 211, 238, 0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(0, -10, cr.bg ? 24 : 34, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Main faceted crystal spire
-      const drawSpire = (ox, oy, w, h, rot) => {
-        ctx.save();
-        ctx.translate(ox, oy);
-        ctx.rotate(rot);
-        ctx.beginPath();
-        ctx.moveTo(-w, 0);
-        ctx.lineTo(-w * 0.65, -h * 0.72);
-        ctx.lineTo(0, -h);
-        ctx.lineTo(w * 0.65, -h * 0.72);
-        ctx.lineTo(w, 0);
-        ctx.closePath();
-        const cg = ctx.createLinearGradient(-w, 0, w, -h);
-        cg.addColorStop(0, '#0e7490');
-        cg.addColorStop(0.5, '#22d3ee');
-        cg.addColorStop(1, '#cffafe');
-        ctx.fillStyle = cg;
-        ctx.fill();
-
-        // Highlight facet
-        ctx.beginPath();
-        ctx.moveTo(0, -h);
-        ctx.lineTo(-w * 0.65, -h * 0.72);
-        ctx.lineTo(0, 0);
-        ctx.closePath();
-        ctx.fillStyle = `rgba(255, 255, 255, ${(0.35 * pulse).toFixed(2)})`;
-        ctx.fill();
-        ctx.restore();
-      };
-
-      drawSpire(0, 0, 6, 26, 0);
-      drawSpire(6, 2, 4.2, 16, 0.36);
-      drawSpire(-6, 3, 3.8, 13, -0.34);
-
-      ctx.restore();
-    }
-  }
-
-  /** @private */
-  _drawFrostMotes(ctx) {
-    for (let i = 0; i < this._frostMotes.length; i += 1) {
-      const m = this._frostMotes[i];
-      const alpha = 0.14 + 0.28 * (0.5 + 0.5 * Math.sin(this._elapsed * m.speed + m.phase));
-      const mx = m.x + Math.sin(this._elapsed * 0.6 + m.phase) * 6;
-      const my = m.y + Math.cos(this._elapsed * 0.5 + m.phase) * 4;
-      ctx.fillStyle = `rgba(186, 230, 253, ${alpha.toFixed(2)})`;
-      ctx.beginPath();
-      ctx.arc(mx, my, m.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /** @private */
-  _drawPawprints(ctx) {
-    for (let i = 0; i < this._pawprints.length; i += 1) {
-      const p = this._pawprints[i];
-      const alpha = clamp((p.life / p.maxLife) * 0.36, 0, 0.36);
-      ctx.fillStyle = `rgba(14, 116, 144, ${alpha.toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, 7.5, 3.2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Toe pads
-      for (let t = -1; t <= 1; t += 1) {
-        ctx.beginPath();
-        ctx.arc(p.x + t * 4.5, p.y - 3.2, 1.7, 0, Math.PI * 2);
-        ctx.fill();
+  _drawSnow(fb, layer) {
+    for (let i = 0; i < this._flakes.length; i += 1) {
+      const f = this._flakes[i];
+      if (f.layer !== layer) continue;
+      const x = Math.round(f.x);
+      const y = Math.round(f.y);
+      if (layer === 0) px(fb, x, y, P[8]);
+      else if (layer === 1) px(fb, x, y, P[11]);
+      else {
+        px(fb, x, y, P[13]);
+        px(fb, x + 1, y, P[12]);
+        px(fb, x, y + 1, P[12]);
+        px(fb, x + 1, y + 1, P[11]);
       }
     }
   }
 
   /** @private */
-  _drawWaterDrops(ctx) {
-    for (let i = 0; i < this._waterDrops.length; i += 1) {
-      const d = this._waterDrops[i];
+  _drawPawprints(fb) {
+    for (const pp of this._pawprints) {
+      const dens = pp.life / pp.max;
+      for (let dx = -1; dx <= 1; dx += 1) {
+        const x = pp.x + dx;
+        if (bay(x, pp.y) < dens * 16) px(fb, x, pp.y, dx === 0 ? P[8] : P[9]);
+      }
+      if (bay(pp.x, pp.y - 1) < dens * 12) px(fb, pp.x, pp.y - 1, P[10]);
+    }
+  }
+
+  /** @private */
+  _drawBearShadow(fb) {
+    const b = this._bear;
+    const lift = Math.max(0, -b.yOffset);
+    mapRadial(fb, Math.round(b.x + b.dir * 4), FLOOR_Y + 1, 34 - lift * 2, 4, 1.4 - lift * 0.15, MAP_DARK, 1);
+    for (const p of this._penguins) {
+      if (p.status === 'landed') mapRadial(fb, p.x, FLOOR_Y + 1, 9, 2.5, 1.2, MAP_DARK, 1);
+      if (p.status === 'falling') {
+        const k = clamp((p.y - SNOW_Y) / (FLOOR_Y - SNOW_Y), 0, 1);
+        mapRadial(fb, p.x, FLOOR_Y + 1, 4 + k * 6, 2, 0.4 + k * 0.8, MAP_DARK, 1);
+      }
+    }
+  }
+
+  /** @private */
+  _drawBridge(fb, t) {
+    const B = this._bridge;
+    if (!B) return;
+    const bb = B.buf;
+    for (let i = 44 * W; i < 112 * W; i += 1) {
+      if (bb[i]) fb[i] = bb[i];
+    }
+
+    // Trapdoors (iron-banded timber, rotating in-plane about the lower hinge)
+    const T = DECK_BOTTOM - SNOW_Y;
+    for (let i = 0; i < this._trapdoors.length; i += 1) {
+      const d = this._trapdoors[i];
+      const a = (d.angle * Math.PI) / 180;
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
+      const hx = d.x0;
+      const hy = DECK_BOTTOM;
+      const R = d.w + T + 2;
+      for (let y = hy - T - 1; y <= hy + R; y += 1) {
+        for (let x = hx - 2; x <= hx + R; x += 1) {
+          const dx = x + 0.5 - hx;
+          const dy = y + 0.5 - hy;
+          const u = dx * ca + dy * sa;
+          const v = -dx * sa + dy * ca;
+          if (u < 0 || u >= d.w || v < -T || v >= 0) continue;
+          const uu = Math.floor(u);
+          const vv = Math.floor(v + T);
+          let c;
+          if (d.snow && vv < 4) {
+            const lump = vv === 0 && (hash2(uu + i * 31, 1) > 0.6 || uu === 0 || uu === d.w - 1);
+            if (lump) continue;
+            c = vv <= 1 ? P[13] : vv === 2 ? P[12] : P[11];
+          } else if (uu === 0 || uu === d.w - 1 || vv === T - 1 || (!d.snow && vv === 0)) {
+            c = P[30];
+          } else if (vv === 6 || vv === 11) {
+            c = uu % 5 === 2 ? P[35] : P[34];
+          } else if (vv === 7 || vv === 12) {
+            c = P[33];
+          } else if (uu % 6 === 0) {
+            c = P[30];
+          } else {
+            const g = hash2(uu * 7 + i, vv >> 1);
+            c = g > 0.82 ? P[30] : uu % 6 === 5 ? P[32] : g > 0.4 ? P[31] : P[32];
+          }
+          if (uu < 3 && vv > T - 4) c = P[33];
+          if (d.angle > 40 && bay(x, y) < 6) c = MAP_DARK.get(c) || c;
+          px(fb, x, y, c);
+        }
+      }
+      // Cracks glowing along the frame while breaking open
+      if (d.crackGlow > 0) {
+        for (let k = 0; k < 6; k += 1) {
+          if (hash2(k, Math.floor(t * 20)) > d.crackGlow) continue;
+          const side = k % 2 === 0 ? d.x0 - 2 - (k >> 1) : d.x0 + d.w + 1 + (k >> 1);
+          const y = BLOCK_Y + 1 + Math.floor(hash2(k * 7, i) * 8);
+          px(fb, side, y, P[13]);
+          px(fb, side + (k % 2 === 0 ? -1 : 1), y + 1, P[12]);
+        }
+      }
+    }
+
+    // Lantern flames
+    for (let k = 0; k < LANTERNS.length; k += 1) {
+      const L = LANTERNS[k];
+      const fl = Math.sin(t * 13 + k * 2) * Math.sin(t * 7.3 + k);
+      const sway = Math.round(Math.sin(t * 9 + k * 3) * 0.7);
+      const tall = fl > 0.2 ? 1 : 0;
+      for (let x = L.x - 1; x <= L.x + 1; x += 1) px(fb, x, 62, P[27]);
+      px(fb, L.x, 62, P[29]);
+      px(fb, L.x, 61, P[28]);
+      px(fb, L.x + sway, 60, P[28]);
+      px(fb, L.x + sway, 59 - tall, P[29]);
+      if (tall) px(fb, L.x + sway, 59, P[28]);
+    }
+  }
+
+  /** @private */
+  _drawDrips(fb) {
+    for (const d of this._drips) {
       if (!d.active) continue;
-      ctx.beginPath();
-      ctx.moveTo(d.x, d.y - 4);
-      ctx.quadraticCurveTo(d.x + 2.4, d.y + 1, d.x, d.y + 3);
-      ctx.quadraticCurveTo(d.x - 2.4, d.y + 1, d.x, d.y - 4);
-      ctx.closePath();
-      ctx.fillStyle = '#7dd3fc';
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(d.x - 0.6, d.y + 0.5, 0.8, 0, Math.PI * 2);
-      ctx.fill();
+      const y = Math.round(d.y);
+      px(fb, d.x, y, P[12]);
+      if (d.vy > 60) px(fb, d.x, y - 1, P[10]);
     }
   }
 
   /** @private */
-  _drawIceRampAndTrapdoors(ctx) {
-    const drawIceBridgeSegment = (x, width) => {
-      if (width <= 0.5) return;
-
-      // Translucent multi-layered glacial ice block
-      const iceGrad = ctx.createLinearGradient(0, RAMP_Y, 0, RAMP_Y + RAMP_H);
-      iceGrad.addColorStop(0, '#e0f2fe');
-      iceGrad.addColorStop(0.28, '#7dd3fc');
-      iceGrad.addColorStop(0.7, '#38bdf8');
-      iceGrad.addColorStop(1, '#0369a1');
-      ctx.fillStyle = iceGrad;
-      ctx.fillRect(x, RAMP_Y, width, RAMP_H);
-
-      // Internal diagonal crystal fracture lines
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, RAMP_Y, width, RAMP_H);
-      ctx.clip();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-      ctx.lineWidth = 1.2;
-      for (let fx = x + 10; fx < x + width; fx += 24) {
-        ctx.beginPath();
-        ctx.moveTo(fx, RAMP_Y + 2);
-        ctx.lineTo(fx - 7, RAMP_Y + RAMP_H - 2);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // Thick sculpted snow blanket along top edge
-      const snowGrad = ctx.createLinearGradient(0, RAMP_Y - 4, 0, RAMP_Y + 6);
-      snowGrad.addColorStop(0, '#ffffff');
-      snowGrad.addColorStop(0.65, '#f0f9ff');
-      snowGrad.addColorStop(1, '#bae6fd');
-      ctx.fillStyle = snowGrad;
-      traceRoundedRect(ctx, x - 0.5, RAMP_Y - 3, width + 1, 7.5, 3);
-      ctx.fill();
-
-      // Bottom dark glacial rim shadow
-      ctx.fillStyle = 'rgba(7, 25, 48, 0.55)';
-      ctx.fillRect(x, RAMP_Y + RAMP_H - 2, width, 2);
+  _penguinPose(p, t) {
+    const o = {
+      dir: p.facingDir,
+      s: p.scale,
+      lean: 0,
+      rot: 0,
+      breath: Math.sin(p.breathPhase),
+      blink: p.blinkTimer > 0,
+      turn: p.turn,
+      pitch: p.pitch,
+      fl: 0.12,
+      ff: 0,
+      beak: 0,
+      squash: 1,
+      alert: false,
+      hop: 0,
+      shake: 0,
     };
-
-    // Draw solid glacial bridge segments & hanging 3D icicles between trapdoors
-    let cursor = 0;
-    for (let i = 0; i < this._trapdoors.length; i += 1) {
-      const door = this._trapdoors[i];
-      const leftEdge = door.x - door.width / 2;
-      drawIceBridgeSegment(cursor, leftEdge - cursor);
-
-      if (leftEdge - cursor >= 14) {
-        const icicleX = cursor + (leftEdge - cursor) / 2;
-        const len = 14 + (i % 3) * 7;
-        this._draw3DIcicle(ctx, icicleX, CAVE_TOP, 6.5, len);
+    if (p.status === 'idle') {
+      o.lean = Math.sin(p.swayPhase) * 0.05;
+      o.fl = 0.12 + Math.sin(p.swayPhase * 0.7) * 0.06;
+    } else if (p.status === 'cheer') {
+      if (p.cheerDelay <= 0) {
+        const el = 0.72 - p.timer;
+        o.hop = Math.round(Math.abs(Math.sin((el * Math.PI) / 0.36)) * 6);
+        const flap = Math.sin(el * 30 + p.index);
+        o.fl = 1.2 + flap * 0.8;
+        o.ff = 1.2 - flap * 0.8;
+        o.beak = 0.6;
       }
-
-      cursor = leftEdge + door.width;
+    } else if (p.status === 'panic') {
+      o.shake = Math.floor(t * 30) % 2 ? 1 : -1;
+      o.fl = 1.9 + Math.sin(t * 40) * 0.7;
+      o.ff = 1.9 + Math.cos(t * 40) * 0.7;
+      o.beak = 1;
+      o.alert = true;
+      o.pitch = 0.45;
+      o.turn = 0;
+    } else if (p.status === 'falling') {
+      o.rot = p.rotation;
+      o.fl = 2 + Math.sin(t * 42) * 0.8;
+      o.ff = 2 + Math.cos(t * 42) * 0.8;
+      o.beak = 1;
+      o.alert = true;
+      o.turn = 0;
+      o.pitch = -0.2;
+    } else if (p.status === 'landed') {
+      o.squash = p.squashY;
+      o.shake = Math.floor(t * 16) % 2;
+      o.fl = 1.4 + Math.sin(t * 34) * 0.9;
+      o.ff = 1.4 + Math.cos(t * 34) * 0.9;
+      o.beak = Math.floor(t * 10) % 2 ? 1 : 0.4;
+      o.alert = true;
+      o.turn = 0;
+      o.pitch = -0.25;
+      o.lean = Math.sin(t * 20) * 0.1;
+      o.hop = Math.round(Math.abs(Math.sin(t * 12)) * 1.4);
     }
-    drawIceBridgeSegment(cursor, CANVAS_W - cursor);
-
-    // Draw ice-and-timber hinged trapdoors under each penguin
-    for (let i = 0; i < this._trapdoors.length; i += 1) {
-      const door = this._trapdoors[i];
-      const hingeX = door.x - door.width / 2;
-      const hingeY = RAMP_Y + 4;
-
-      ctx.save();
-      ctx.translate(hingeX, hingeY);
-      ctx.rotate((door.angle * Math.PI) / 180);
-
-      // Timber & iron trapdoor panel
-      const woodGrad = ctx.createLinearGradient(0, -3, 0, 14);
-      woodGrad.addColorStop(0, '#b45309');
-      woodGrad.addColorStop(0.45, '#92400e');
-      woodGrad.addColorStop(1, '#5c2808');
-      traceRoundedRect(ctx, 0, -2, door.width, 15, 2.5);
-      ctx.fillStyle = woodGrad;
-      ctx.fill();
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-
-      // Frost crust on top when closed
-      if (door.angle < 12) {
-        ctx.fillStyle = 'rgba(240, 249, 255, 0.88)';
-        traceRoundedRect(ctx, 1, -4, door.width - 2, 4.5, 2);
-        ctx.fill();
-      }
-
-      // Iron reinforcement bar across middle
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(1, 4, door.width - 2, 4);
-      ctx.fillStyle = '#64748b';
-      ctx.fillRect(1, 4, door.width - 2, 1.4);
-
-      // Metallic brass rivets
-      const rivets = [5, door.width / 2, door.width - 5];
-      for (let r = 0; r < rivets.length; r += 1) {
-        ctx.fillStyle = '#fbbf24';
-        ctx.beginPath();
-        ctx.arc(rivets[r], 6, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fef08a';
-        ctx.beginPath();
-        ctx.arc(rivets[r] - 0.5, 5.5, 0.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Glowing cyan frost fracture flash when cracking open
-      if (door.crackGlow > 0.02) {
-        ctx.strokeStyle = `rgba(125, 211, 252, ${door.crackGlow.toFixed(2)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(door.width * 0.2, -2);
-        ctx.lineTo(door.width * 0.45, 5);
-        ctx.lineTo(door.width * 0.75, 11);
-        ctx.stroke();
-      }
-
-      ctx.restore();
-
-      // Brass hinge pin at pivot
-      ctx.fillStyle = '#d97706';
-      ctx.beginPath();
-      ctx.arc(hingeX + 1, hingeY + 1, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fde68a';
-      ctx.beginPath();
-      ctx.arc(hingeX + 0.3, hingeY + 0.3, 1.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    return o;
   }
 
   /** @private */
-  _drawLanternPosts(ctx) {
-    const posts = [
-      { x: 24, dir: 1 },
-      { x: 776, dir: -1 },
-    ];
-    const flicker = Math.sin(this._elapsed * 12) * 0.5 + Math.cos(this._elapsed * 19) * 0.5;
-
-    for (let i = 0; i < posts.length; i += 1) {
-      const { x, dir } = posts[i];
-      const baseY = RAMP_Y - 1;
-
-      // Weathered timber post
-      const postGrad = ctx.createLinearGradient(x - 4, baseY - 50, x + 4, baseY - 50);
-      postGrad.addColorStop(0, '#451a03');
-      postGrad.addColorStop(0.4, '#92400e');
-      postGrad.addColorStop(1, '#5c2808');
-      traceRoundedRect(ctx, x - 4, baseY - 50, 8, 52, 2);
-      ctx.fillStyle = postGrad;
-      ctx.fill();
-
-      // Snow cap on post top
-      ctx.fillStyle = '#f8fafc';
-      ctx.beginPath();
-      ctx.ellipse(x, baseY - 50, 6.5, 3, 0, Math.PI, Math.PI * 2);
-      ctx.fill();
-
-      // Curved wrought-iron bracket arm
-      const armEndX = x + dir * 18;
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 2.6;
-      ctx.beginPath();
-      ctx.moveTo(x + dir * 3, baseY - 43);
-      ctx.quadraticCurveTo(x + dir * 13, baseY - 48, armEndX, baseY - 40);
-      ctx.stroke();
-
-      // Iron lantern housing
-      const lx = armEndX;
-      const ly = baseY - 38;
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.moveTo(lx - 7, ly + 3);
-      ctx.lineTo(lx, ly - 3);
-      ctx.lineTo(lx + 7, ly + 3);
-      ctx.closePath();
-      ctx.fill();
-
-      // Glass chamber with warm golden flame
-      const flameGrad = ctx.createRadialGradient(lx, ly + 9, 1, lx, ly + 9, 8);
-      flameGrad.addColorStop(0, '#fef9c3');
-      flameGrad.addColorStop(0.5, '#f59e0b');
-      flameGrad.addColorStop(1, '#ea580c');
-      traceRoundedRect(ctx, lx - 5, ly + 3, 10, 12, 2);
-      ctx.fillStyle = flameGrad;
-      ctx.fill();
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-
-      // Inner bright flickering flame tongue
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(lx, ly + 9.5, 1.8, 3.2 + flicker * 0.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Lantern base cap
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(lx - 6, ly + 15, 12, 2.5);
-    }
-  }
-
-  /** @private */
-  _drawLanternGlows(ctx) {
-    const flicker = Math.sin(this._elapsed * 11) * 4 + Math.cos(this._elapsed * 17) * 2;
-    const sources = [
-      { x: 42, y: RAMP_Y - 29 },
-      { x: 758, y: RAMP_Y - 29 },
-    ];
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    for (let i = 0; i < sources.length; i += 1) {
-      const s = sources[i];
-      const rad = 76 + flicker;
-      const glow = ctx.createRadialGradient(s.x, s.y, 4, s.x, s.y, rad);
-      glow.addColorStop(0, 'rgba(254, 240, 138, 0.36)');
-      glow.addColorStop(0.35, 'rgba(245, 158, 11, 0.16)');
-      glow.addColorStop(1, 'rgba(245, 158, 11, 0)');
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rad, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /* ------------------------------------------------------------------------
-     Anatomically Realistic Emperor Penguins (HD Painted + Articulated)
-     ------------------------------------------------------------------------ */
-
-  /** @private */
-  _drawPenguins(ctx) {
-    const bear = this._bear;
-
+  _drawPenguins(fb, t) {
+    const spr = this._penguinSprite;
     for (let i = 0; i < this._penguins.length; i += 1) {
       const p = this._penguins[i];
       if (p.status === 'eaten') continue;
+      const o = this._penguinPose(p, t);
+      if (p.status === 'idle' || p.status === 'cheer') {
+        mapRadial(fb, p.x + 1, SNOW_Y, 8, 1.6, o.hop ? 0.7 : 1.3, MAP_DARK, 1);
+      }
+      buildPenguin(spr, o);
+      spr.resolve(fb, Math.round(p.x), Math.round(p.y), o.dir < 0);
+      if (p.status === 'panic' || (p.status === 'landed' && Math.floor(t * 6) % 2 === 0)) {
+        const by = Math.round(p.y) - 36 - (Math.floor(t * 12) % 2);
+        drawBadge(fb, '!', p.x, by, 1, P[13], P[12], P[54], P[43], P[1]);
+      }
+    }
+  }
 
-      let drawX = p.x;
-      let drawY = p.y;
-      let rot = p.rotation;
-      let scaleY = p.squashY;
-      let flipperL = 0.18;
-      let flipperR = -0.18;
-      let beakOpen = 0;
-      let eyeMode = 'normal'; // 'normal' | 'blink' | 'happy' | 'wide' | 'nervous'
-      let headAngle = p.headTilt;
+  /** @private */
+  _bearPose(t) {
+    const b = this._bear;
+    let flex = 0;
+    let yo = b.yOffset;
+    const stand = 0.15 + Math.max(0, yo) * 0.1;
+    const legs = {
+      hn: [stand, -0.3 - Math.max(0, yo) * 0.2],
+      hf: [stand + 0.05, -0.32],
+      fn: [0.04, -0.06],
+      ff: [-0.02, -0.04],
+    };
+    if (b.mode === 'sprint') {
+      const frame = Math.floor((b.stridePhase / (Math.PI * 2)) * 6) % 6;
+      const phi = (frame / 6) * Math.PI * 2;
+      const pose = (off, front) => {
+        const sw = Math.sin(phi + off);
+        const lift = Math.max(0, Math.cos(phi + off));
+        return front ? [0.7 * sw, -1.15 * lift] : [0.65 * sw + 0.1, -0.35 - 0.85 * lift];
+      };
+      legs.hn = pose(0, false);
+      legs.hf = pose(0.55, false);
+      legs.fn = pose(2.7, true);
+      legs.ff = pose(3.25, true);
+      flex = -Math.sin(phi);
+      yo = -Math.round(1 + 3 * Math.max(0, Math.sin(phi + 0.4)));
+    }
+    if (b.pawStamp > 0.55) {
+      legs.fn = [0.55, -1.25];
+    }
+    return {
+      dir: b.dir,
+      yo,
+      flex,
+      breath: Math.sin(t * 1.7),
+      legs,
+      pitch: b.headPitch,
+      jaw: b.jawOpen,
+      tongue: b.tongueOut,
+      blink: b.blinkTimer > 0,
+      ear: b.ear,
+      lunge: b.lunge,
+      neckDrop: b.mode === 'grumble' ? 1.5 : 0,
+    };
+  }
 
-      if (p.status === 'idle') {
-        const sway = Math.sin(p.swayPhase) * 0.045;
-        rot = sway;
-        scaleY = 1 + Math.sin(p.breathPhase) * 0.018;
-        flipperL = 0.16 + Math.sin(p.swayPhase) * 0.08;
-        flipperR = -0.16 + Math.sin(p.swayPhase) * 0.08;
+  /** @private */
+  _drawBear(fb, t) {
+    const b = this._bear;
+    const pose = this._bearPose(t);
+    buildBear(this._bearSprite, pose);
+    this._bearSprite.resolve(fb, Math.round(b.x), FLOOR_Y, b.dir < 0, { rim2: true, flash: b.hitFlashTimer > 0 });
+  }
 
-        // Subtle nervous glance down if bear is near or watching below
-        const bearNear = Math.abs(bear.x - p.x) < 110;
-        if (bearNear && bear.mode !== 'grumble') {
-          eyeMode = 'nervous';
-          headAngle = 0.12;
-        } else if (p.blinkTimer > 0) {
-          eyeMode = 'blink';
+  /** @private */
+  _drawParticles(fb) {
+    for (const pt of this._particles) {
+      const x = Math.round(pt.x);
+      const y = Math.round(pt.y);
+      const lf = pt.life / pt.max;
+      switch (pt.kind) {
+        case 'snow':
+          px(fb, x, y, pt.c);
+          if (pt.size > 1 && lf > 0.3) {
+            px(fb, x + 1, y, P[12]);
+            px(fb, x, y + 1, P[11]);
+          }
+          break;
+        case 'shard': {
+          px(fb, x, y, pt.c);
+          px(fb, x + Math.round(Math.cos(pt.rot)), y + Math.round(Math.sin(pt.rot)), P[10]);
+          if (lf > 0.5) px(fb, x - Math.round(Math.cos(pt.rot)), y - Math.round(Math.sin(pt.rot)), P[13]);
+          break;
         }
-      } else if (p.status === 'cheer') {
-        if (p.cheerDelay <= 0) {
-          const prog = 1 - clamp(p.timer / 0.72, 0, 1);
-          const hop = Math.sin(prog * Math.PI) * 24;
-          drawY -= hop;
-          const flap = Math.sin(this._elapsed * 26 + i) * 0.85;
-          flipperL = -0.75 + flap * 0.45;
-          flipperR = 0.75 - flap * 0.45;
-          eyeMode = 'happy';
-          headAngle = -0.1;
+        case 'feather': {
+          const s = Math.sin(this._elapsed * 6 + pt.sway) > 0 ? 1 : 0;
+          px(fb, x, y, pt.c);
+          px(fb, x + 1, y + s, pt.c);
+          if (lf > 0.4) px(fb, x - 1, y - s, pt.c === P[13] ? P[11] : P[44]);
+          break;
         }
-      } else if (p.status === 'panic') {
-        drawX += Math.sin(this._elapsed * 70) * 2.5;
-        const flap = Math.sin(this._elapsed * 44) * 0.95;
-        flipperL = -0.9 + flap * 0.5;
-        flipperR = 0.9 - flap * 0.5;
-        beakOpen = 0.75;
-        eyeMode = 'wide';
-        headAngle = -0.15;
-      } else if (p.status === 'falling') {
-        const flap = Math.sin(this._elapsed * 42) * 0.9;
-        flipperL = -0.8 + flap * 0.4;
-        flipperR = 0.8 - flap * 0.4;
-        beakOpen = 0.85;
-        eyeMode = 'wide';
-      } else if (p.status === 'landed') {
-        // Sits/flails startled on the snow floor while bear sprints over!
-        drawX += Math.sin(this._elapsed * 32) * 1.4;
-        const flap = Math.sin(this._elapsed * 34) * 0.85;
-        flipperL = -0.65 + flap * 0.5;
-        flipperR = 0.65 - flap * 0.5;
-        beakOpen = 0.6;
-        eyeMode = 'wide';
-        rot = Math.sin(this._elapsed * 20) * 0.12;
-      }
-
-      // Soft contact shadow on snow (ramp or cave floor)
-      if (p.status === 'idle' || p.status === 'cheer' || p.status === 'landed') {
-        const shadowY = p.status === 'landed' ? FLOOR_Y + 1 : RAMP_Y + 0.5;
-        const heightAbove = Math.max(0, shadowY - drawY);
-        const shadowScale = clamp(1 - heightAbove / 45, 0.45, 1);
-        ctx.fillStyle = `rgba(7, 25, 48, ${(0.32 * shadowScale).toFixed(2)})`;
-        ctx.beginPath();
-        ctx.ellipse(drawX, shadowY, 13 * shadowScale, 3.2 * shadowScale, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Draw articulated Emperor Penguin
-      ctx.save();
-      ctx.translate(drawX, drawY);
-      ctx.rotate(rot);
-      ctx.scale(1, scaleY);
-      this._drawEmperorPenguinAnatomy(ctx, {
-        flipperL,
-        flipperR,
-        beakOpen,
-        eyeMode,
-        headAngle,
-        facingDir: p.status === 'landed' ? (bear.x >= p.x ? 1 : -1) : p.facingDir,
-      });
-      ctx.restore();
-
-      // Startled "!" indicator above panicking penguin
-      if (p.status === 'panic') {
-        const bounce = Math.abs(Math.sin(this._elapsed * 24)) * 5;
-        const bx = drawX;
-        const by = drawY - 56 - bounce;
-        ctx.save();
-        ctx.fillStyle = '#0f172a';
-        ctx.beginPath();
-        ctx.arc(bx, by, 9, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#fef08a';
-        ctx.font = '800 13px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('!', bx, by + 0.5);
-        ctx.restore();
-      }
-    }
-  }
-
-  /**
-   * Draws a single anatomically detailed Emperor Penguin (*Aptenodytes forsteri*)
-   * anchored at feet center (0, 0), height ~46px, width ~30px.
-   * @private
-   */
-  _drawEmperorPenguinAnatomy(ctx, pose) {
-    const { flipperL, flipperR, beakOpen, eyeMode, headAngle, facingDir } = pose;
-
-    // 1. Shaded webbed feet
-    const drawFoot = (fx, dir) => {
-      ctx.fillStyle = '#1e293b';
-      ctx.beginPath();
-      ctx.ellipse(fx, -1.5, 6.2, 2.4, dir * 0.08, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#475569';
-      ctx.beginPath();
-      ctx.ellipse(fx - dir * 0.8, -2.1, 4.2, 1.3, 0, 0, Math.PI * 2);
-      ctx.fill();
-    };
-    drawFoot(-5.8, -1);
-    drawFoot(5.8, 1);
-
-    // 2. Articulated flippers (drawn slightly behind torso seam)
-    const drawFlipper = (side, angle) => {
-      ctx.save();
-      ctx.translate(side * 10.5, -28);
-      ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(side * 6, 4, side * 7.5, 14, side * 3.5, 22);
-      ctx.bezierCurveTo(side * 0.5, 19, -side * 1.5, 10, 0, 0);
-      ctx.closePath();
-      const fg = ctx.createLinearGradient(0, 0, side * 6, 20);
-      fg.addColorStop(0, '#0f172a');
-      fg.addColorStop(0.65, '#1e293b');
-      fg.addColorStop(1, '#334155');
-      ctx.fillStyle = fg;
-      ctx.fill();
-      // Subtle icy-blue rim highlight on outer flipper edge
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
-      ctx.lineWidth = 0.9;
-      ctx.stroke();
-      ctx.restore();
-    };
-    drawFlipper(-1, flipperL);
-    drawFlipper(1, flipperR);
-
-    // 3. Smooth teardrop Emperor torso (glossy charcoal-navy back)
-    ctx.beginPath();
-    ctx.moveTo(0, -37);
-    ctx.bezierCurveTo(11, -35, 15, -18, 12.5, -6);
-    ctx.bezierCurveTo(10, -1, -10, -1, -12.5, -6);
-    ctx.bezierCurveTo(-15, -18, -11, -35, 0, -37);
-    ctx.closePath();
-
-    const backGrad = ctx.createLinearGradient(-13, -36, 13, -4);
-    backGrad.addColorStop(0, '#0a1222');
-    backGrad.addColorStop(0.5, '#17253d');
-    backGrad.addColorStop(0.88, '#263a59');
-    backGrad.addColorStop(1, '#475569');
-    ctx.fillStyle = backGrad;
-    ctx.fill();
-
-    // 4. Creamy white belly with authentic Emperor golden-amber upper chest fade
-    ctx.beginPath();
-    ctx.moveTo(0, -34);
-    ctx.bezierCurveTo(8, -32, 10.5, -18, 9, -6.5);
-    ctx.bezierCurveTo(6.5, -2.5, -6.5, -2.5, -9, -6.5);
-    ctx.bezierCurveTo(-10.5, -18, -8, -32, 0, -34);
-    ctx.closePath();
-
-    const bellyGrad = ctx.createLinearGradient(0, -34, 0, -3);
-    bellyGrad.addColorStop(0, '#f59e0b'); // warm Emperor golden-amber throat
-    bellyGrad.addColorStop(0.18, '#fde68a'); // soft butter-gold upper chest
-    bellyGrad.addColorStop(0.36, '#fffbeb'); // warm cream transition
-    bellyGrad.addColorStop(0.75, '#ffffff'); // pure snow-white belly
-    bellyGrad.addColorStop(1, '#cbd5e1'); // cool ambient underbelly shade
-    ctx.fillStyle = bellyGrad;
-    ctx.fill();
-
-    // 5. Velvety black Emperor head with golden-orange auricular ear patches
-    ctx.save();
-    ctx.translate(0, -35);
-    ctx.rotate(headAngle);
-
-    // Head silhouette
-    ctx.beginPath();
-    ctx.ellipse(0, -4.5, 8.6, 8.2, 0, 0, Math.PI * 2);
-    const headGrad = ctx.createRadialGradient(-2.5, -8, 1, 0, -4, 10);
-    headGrad.addColorStop(0, '#27364f');
-    headGrad.addColorStop(0.45, '#0f172a');
-    headGrad.addColorStop(1, '#060a14');
-    ctx.fillStyle = headGrad;
-    ctx.fill();
-
-    // Authentic Emperor golden-amber to orange ear-patch gradients (both sides)
-    const drawEarPatch = (side) => {
-      const eg = ctx.createRadialGradient(side * 5.8, -3, 0.5, side * 5.5, -2.5, 5.5);
-      eg.addColorStop(0, '#f97316');
-      eg.addColorStop(0.55, '#fbbf24');
-      eg.addColorStop(1, 'rgba(253, 224, 71, 0)');
-      ctx.fillStyle = eg;
-      ctx.beginPath();
-      ctx.ellipse(side * 5.6, -2.4, 3.6, 4.8, side * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    };
-    drawEarPatch(-1);
-    drawEarPatch(1);
-
-    // Expressive eyes
-    const drawEye = (ex) => {
-      if (eyeMode === 'blink') {
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 1.3;
-        ctx.beginPath();
-        ctx.moveTo(ex - 2, -5.8);
-        ctx.lineTo(ex + 2, -5.8);
-        ctx.stroke();
-      } else if (eyeMode === 'happy') {
-        ctx.strokeStyle = '#f8fafc';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(ex, -5.2, 2.2, Math.PI * 1.1, Math.PI * 1.9);
-        ctx.stroke();
-      } else {
-        const r = eyeMode === 'wide' ? 2.5 : 1.9;
-        // Sclera ring on wide/nervous eyes
-        if (eyeMode === 'wide' || eyeMode === 'nervous') {
-          ctx.fillStyle = '#f8fafc';
-          ctx.beginPath();
-          ctx.arc(ex, -6, r, 0, Math.PI * 2);
-          ctx.fill();
+        case 'drop':
+          px(fb, x, y, pt.c);
+          break;
+        case 'spark':
+          px(fb, x, y, pt.c);
+          if (lf > 0.5) {
+            px(fb, x + 1, y, pt.c);
+            px(fb, x - 1, y, pt.c);
+            px(fb, x, y + 1, pt.c);
+            px(fb, x, y - 1, pt.c);
+          }
+          break;
+        case 'puff': {
+          const r = pt.r;
+          const dens = lf * 0.75;
+          for (let yy = Math.floor(y - r); yy <= Math.ceil(y + r); yy += 1) {
+            for (let xx = Math.floor(x - r); xx <= Math.ceil(x + r); xx += 1) {
+              const d = Math.hypot(xx - x, yy - y) / (r + 0.01);
+              if (d > 1) continue;
+              if (bay(xx, yy) < dens * (1 - d * 0.6) * 16) px(fb, xx, yy, d < 0.5 ? pt.c : P[11]);
+            }
+          }
+          break;
         }
-        // Glossy dark pupil
-        const pupilOffsetY = eyeMode === 'nervous' ? 0.8 : 0;
-        ctx.fillStyle = '#020617';
-        ctx.beginPath();
-        ctx.arc(ex, -6 + pupilOffsetY, eyeMode === 'wide' ? 1.3 : 1.65, 0, Math.PI * 2);
-        ctx.fill();
-        // Crisp white specular catchlight
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(ex - 0.6, -6.7 + pupilOffsetY * 0.5, 0.7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    };
-    drawEye(-3.4);
-    drawEye(3.4);
-
-    // Slender realistic Emperor curved beak with orange-pink lower mandible stripe
-    const bDir = facingDir >= 0 ? 1 : -1;
-    if (beakOpen > 0.1) {
-      // Open squawking beak
-      ctx.fillStyle = '#9f1239';
-      ctx.beginPath();
-      ctx.moveTo(0, -3.5);
-      ctx.lineTo(bDir * 7.5, -2.5 - beakOpen * 2.2);
-      ctx.lineTo(bDir * 6.5, -0.5 + beakOpen * 2.8);
-      ctx.closePath();
-      ctx.fill();
-
-      // Upper mandible
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.moveTo(-1, -4.5);
-      ctx.quadraticCurveTo(bDir * 4.5, -5.5 - beakOpen * 2, bDir * 8.5, -2.8 - beakOpen * 2);
-      ctx.lineTo(0, -3);
-      ctx.closePath();
-      ctx.fill();
-
-      // Lower mandible with orange-pink Emperor stripe
-      ctx.fillStyle = '#fb7185';
-      ctx.beginPath();
-      ctx.moveTo(-0.5, -2.8);
-      ctx.lineTo(bDir * 7.2, -0.2 + beakOpen * 2.6);
-      ctx.lineTo(0, -1.2);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      // Closed slender curved beak
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.moveTo(-1.2, -4.6);
-      ctx.quadraticCurveTo(bDir * 4.8, -5.2, bDir * 8.2, -2.2);
-      ctx.quadraticCurveTo(bDir * 3.5, -2.0, -1.0, -2.5);
-      ctx.closePath();
-      ctx.fill();
-
-      // Signature Emperor orange-pink lower mandible stripe
-      ctx.strokeStyle = '#fb7185';
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.moveTo(bDir * 0.5, -2.5);
-      ctx.lineTo(bDir * 6.0, -2.2);
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
-  /* ------------------------------------------------------------------------
-     Anatomically Realistic Articulated Polar Bear (4-Limb Kinematic Skeleton)
-     ------------------------------------------------------------------------ */
-
-  /** @private */
-  _drawPolarBear(ctx) {
-    const bear = this._bear;
-    const isSprinting = bear.mode === 'sprint';
-    const breath = Math.sin(this._elapsed * 2.1) * 1.4;
-
-    // Kinematic 4-limb angles (in radians)
-    let farBackHip = 0.06;
-    let farBackKnee = -0.05;
-    let nearBackHip = -0.04;
-    let nearBackKnee = 0.04;
-    let farFrontShoulder = -0.06;
-    let farFrontElbow = 0.04;
-    let nearFrontShoulder = 0.05;
-    let nearFrontElbow = -0.04;
-    let spineFlex = 0;
-
-    if (isSprinting) {
-      // Dynamic bounding gallop: front pair & hind pair stretch and gather cleanly
-      const p = bear.stridePhase;
-      const frontSwing = Math.sin(p) * 0.62;
-      const frontSwing2 = Math.sin(p + 0.42) * 0.58;
-      const backSwing = Math.sin(p + Math.PI + 0.25) * 0.64;
-      const backSwing2 = Math.sin(p + Math.PI + 0.65) * 0.58;
-
-      nearFrontShoulder = frontSwing;
-      nearFrontElbow = Math.max(0, -frontSwing) * 0.72;
-      farFrontShoulder = frontSwing2;
-      farFrontElbow = Math.max(0, -frontSwing2) * 0.72;
-
-      nearBackHip = backSwing;
-      nearBackKnee = -Math.max(0, backSwing) * 0.55;
-      farBackHip = backSwing2;
-      farBackKnee = -Math.max(0, backSwing2) * 0.55;
-
-      spineFlex = Math.sin(p) * 0.065;
-    } else if (bear.mode === 'grumble' && bear.pawStamp > 0) {
-      // Heavy front paw stamp on grumble
-      const lift = Math.sin(bear.pawStamp * Math.PI) * 0.52;
-      nearFrontShoulder = -lift;
-      nearFrontElbow = lift * 0.85;
-    } else if (bear.mode === 'chompOpen') {
-      // Slight forward lunge
-      nearFrontShoulder = -0.22;
-      farFrontShoulder = -0.14;
-      nearBackHip = 0.16;
-    }
-
-    // Soft elliptical snow contact shadow
-    const shadowStretch = isSprinting ? 1.15 : 1.0;
-    const shadowGrad = ctx.createRadialGradient(bear.x, FLOOR_Y + 2, 10, bear.x, FLOOR_Y + 2, 62 * shadowStretch);
-    shadowGrad.addColorStop(0, 'rgba(7, 25, 48, 0.42)');
-    shadowGrad.addColorStop(0.65, 'rgba(7, 25, 48, 0.18)');
-    shadowGrad.addColorStop(1, 'rgba(7, 25, 48, 0)');
-    ctx.fillStyle = shadowGrad;
-    ctx.beginPath();
-    ctx.ellipse(bear.x, FLOOR_Y + 2, 62 * shadowStretch, 10, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Draw articulated Polar Bear facing right in local space, flipped by bear.dir
-    ctx.save();
-    ctx.translate(bear.x, FLOOR_Y + bear.yOffset);
-    ctx.scale(bear.dir, 1);
-
-    // 1. Far-side limbs (shaded darker cool glacier-blue for 3D depth)
-    this._drawBearLimb(ctx, -34, -34, farBackHip, farBackKnee, true, true);
-    this._drawBearLimb(ctx, 22, -36, farFrontShoulder, farFrontElbow, true, false);
-
-    // 2. Sculpted muscular torso (shoulder hump, sloping rump, fur shading, rounded tail)
-    ctx.save();
-    ctx.rotate(spineFlex);
-
-    // Small rounded polar bear tail
-    ctx.fillStyle = '#e2e8f0';
-    ctx.beginPath();
-    ctx.ellipse(-56, -42, 7.5, 5.5, -0.35, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Main body contour
-    ctx.beginPath();
-    ctx.moveTo(-54, -38);
-    // Heavy sloping rump -> muscular shoulder hump
-    ctx.bezierCurveTo(-52, -62, -24, -67, -2, -64);
-    ctx.bezierCurveTo(14, -69, 32, -68, 42, -56);
-    // Deep furred chest -> underbelly -> hind flank
-    ctx.bezierCurveTo(46, -42, 36, -24, 18, -22);
-    ctx.bezierCurveTo(-2, -20, -24, -21, -40, -24);
-    ctx.bezierCurveTo(-52, -26, -56, -32, -54, -38);
-    ctx.closePath();
-
-    const bodyGrad = ctx.createLinearGradient(0, -68 - breath, 0, -20);
-    bodyGrad.addColorStop(0, '#ffffff');
-    bodyGrad.addColorStop(0.28, '#fdfbf7'); // warm ivory Arctic fur
-    bodyGrad.addColorStop(0.65, '#e2e8f0'); // soft snow-blue midtone
-    bodyGrad.addColorStop(0.9, '#cbd5e1'); // cool glacier-blue shadow
-    bodyGrad.addColorStop(1, '#94a3b8'); // underbelly occlusion
-    ctx.fillStyle = bodyGrad;
-    ctx.fill();
-
-    // Subtle moonlight rim highlight along top back & shoulder hump
-    ctx.beginPath();
-    ctx.moveTo(-48, -48);
-    ctx.bezierCurveTo(-36, -63, -12, -66, 18, -66);
-    ctx.bezierCurveTo(28, -66, 36, -62, 40, -56);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    // Subtle fur-tuft shading strokes on flank & chest
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.42)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(-26, -42);
-    ctx.quadraticCurveTo(-20, -34, -24, -27);
-    ctx.moveTo(8, -46);
-    ctx.quadraticCurveTo(13, -36, 9, -28);
-    ctx.moveTo(28, -44);
-    ctx.quadraticCurveTo(32, -36, 29, -29);
-    ctx.stroke();
-
-    // 3. Long tapered Arctic neck & sculpted articulated head
-    this._drawBearHeadAndJaw(ctx, bear, breath);
-
-    ctx.restore();
-
-    // 4. Near-side limbs (warm ivory highlights + dark curved claws)
-    this._drawBearLimb(ctx, -38, -32, nearBackHip, nearBackKnee, false, true);
-    this._drawBearLimb(ctx, 20, -34, nearFrontShoulder, nearFrontElbow, false, false);
-
-    // Subtle white impact flash on chomp snap
-    if (bear.hitFlashTimer > 0) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-      ctx.beginPath();
-      ctx.ellipse(6, -40, 62, 34, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-
-  /**
-   * Draws one articulated polar bear limb (upper segment + lower leg + broad furred paw + claws).
-   * @private
-   */
-  _drawBearLimb(ctx, pivotX, pivotY, upperAngle, lowerAngle, isFar, isBack) {
-    ctx.save();
-    ctx.translate(pivotX, pivotY);
-    ctx.rotate(upperAngle);
-
-    const upperLen = isBack ? 18 : 19;
-    const upperW = isBack ? 14 : 12.5;
-    const lowerLen = isBack ? 15 : 16;
-
-    // Upper muscular leg
-    const uGrad = ctx.createLinearGradient(-upperW, 0, upperW, upperLen);
-    if (isFar) {
-      uGrad.addColorStop(0, '#94a3b8');
-      uGrad.addColorStop(1, '#64748b');
-    } else {
-      uGrad.addColorStop(0, '#fdfbf7');
-      uGrad.addColorStop(0.55, '#e2e8f0');
-      uGrad.addColorStop(1, '#cbd5e1');
-    }
-    ctx.fillStyle = uGrad;
-    ctx.beginPath();
-    ctx.moveTo(-upperW * 0.72, -4);
-    ctx.quadraticCurveTo(upperW * 0.8, -2, upperW * 0.62, upperLen);
-    ctx.lineTo(-upperW * 0.55, upperLen);
-    ctx.quadraticCurveTo(-upperW * 0.9, upperLen * 0.45, -upperW * 0.72, -4);
-    ctx.closePath();
-    ctx.fill();
-
-    // Knee / elbow joint -> lower leg + broad snowshoe paw
-    ctx.translate(0, upperLen - 2);
-    ctx.rotate(lowerAngle);
-
-    const lGrad = ctx.createLinearGradient(-8, 0, 10, lowerLen);
-    if (isFar) {
-      lGrad.addColorStop(0, '#94a3b8');
-      lGrad.addColorStop(1, '#64748b');
-    } else {
-      lGrad.addColorStop(0, '#f1f5f9');
-      lGrad.addColorStop(0.7, '#e2e8f0');
-      lGrad.addColorStop(1, '#cbd5e1');
-    }
-    ctx.fillStyle = lGrad;
-    ctx.beginPath();
-    ctx.moveTo(-7.5, -2);
-    ctx.lineTo(7.5, -2);
-    ctx.lineTo(8.5, lowerLen - 2);
-    ctx.quadraticCurveTo(13, lowerLen + 1, 10.5, lowerLen + 3.5);
-    ctx.lineTo(-7.5, lowerLen + 3.5);
-    ctx.quadraticCurveTo(-10, lowerLen + 1, -7.5, -2);
-    ctx.closePath();
-    ctx.fill();
-
-    // Dark curved Arctic claws on paw front
-    ctx.fillStyle = isFar ? '#1e293b' : '#0f172a';
-    for (let c = 0; c < 3; c += 1) {
-      ctx.beginPath();
-      ctx.ellipse(9.5 + c * 1.4, lowerLen + 2.2 - c * 0.3, 2.2, 1.1, 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
-  }
-
-  /**
-   * Draws the tapered Arctic neck, sculpted polar bear head, articulated lower jaw,
-   * pink tongue, white canine teeth, dark wet nose, rounded ears, and expressive eyes.
-   * @private
-   */
-  _drawBearHeadAndJaw(ctx, bear, breath) {
-    ctx.save();
-    ctx.translate(34, -52 - breath * 0.5);
-    ctx.rotate(bear.headPitch);
-
-    // Tapered muscular Arctic neck
-    const neckGrad = ctx.createLinearGradient(-12, -16, 18, 16);
-    neckGrad.addColorStop(0, '#fdfbf7');
-    neckGrad.addColorStop(0.6, '#e2e8f0');
-    neckGrad.addColorStop(1, '#cbd5e1');
-    ctx.fillStyle = neckGrad;
-    ctx.beginPath();
-    ctx.moveTo(-10, -14);
-    ctx.quadraticCurveTo(6, -16, 18, -12);
-    ctx.lineTo(18, 10);
-    ctx.quadraticCurveTo(4, 18, -12, 14);
-    ctx.closePath();
-    ctx.fill();
-
-    // Far rounded fur-tufted ear
-    ctx.fillStyle = '#cbd5e1';
-    ctx.beginPath();
-    ctx.arc(14, -15, 5.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Open mouth interior (visible when jaw hinges open!)
-    const jawAngle = bear.jawOpen * 0.58;
-    if (bear.jawOpen > 0.04) {
-      ctx.fillStyle = '#881337';
-      ctx.beginPath();
-      ctx.moveTo(15, 0);
-      ctx.lineTo(38, -1);
-      ctx.lineTo(35, 6 + bear.jawOpen * 13);
-      ctx.lineTo(14, 7 + bear.jawOpen * 4);
-      ctx.closePath();
-      ctx.fill();
-
-      // Pink tongue inside open mouth
-      ctx.fillStyle = '#fb7185';
-      ctx.beginPath();
-      ctx.ellipse(26, 4 + bear.jawOpen * 6.5, 8.5, 3.6, 0.12, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Articulated lower jaw
-    ctx.save();
-    ctx.translate(15, 3);
-    ctx.rotate(jawAngle);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.beginPath();
-    ctx.moveTo(0, -1);
-    ctx.lineTo(22, 0);
-    ctx.quadraticCurveTo(23, 5.5, 16, 6.5);
-    ctx.lineTo(0, 6);
-    ctx.closePath();
-    ctx.fill();
-
-    // Lower white canine tooth
-    if (bear.jawOpen > 0.14) {
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(16, 0);
-      ctx.lineTo(18.5, -4.2);
-      ctx.lineTo(20, 0);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Pink licking tongue curling upward during chompLick
-    if (bear.tongueOut > 0.05) {
-      ctx.fillStyle = '#fb7185';
-      ctx.beginPath();
-      ctx.ellipse(36 + bear.tongueOut * 4, 2 - bear.tongueOut * 2, 5.5 * bear.tongueOut + 2, 3.2, -0.45, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fda4af';
-      ctx.beginPath();
-      ctx.ellipse(36.5 + bear.tongueOut * 4, 1.2 - bear.tongueOut * 2, 3 * bear.tongueOut + 1, 1.4, -0.45, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Upper sculpted cranium & tapered Roman polar bear snout
-    const headGrad = ctx.createLinearGradient(8, -18, 38, 6);
-    headGrad.addColorStop(0, '#ffffff');
-    headGrad.addColorStop(0.55, '#fdfbf7');
-    headGrad.addColorStop(1, '#e2e8f0');
-    ctx.fillStyle = headGrad;
-    ctx.beginPath();
-    ctx.moveTo(6, -14);
-    ctx.bezierCurveTo(16, -18, 28, -13, 39, -7);
-    ctx.quadraticCurveTo(42, -3, 38, 1.5);
-    ctx.lineTo(15, 2.5);
-    ctx.quadraticCurveTo(6, 0, 6, -14);
-    ctx.closePath();
-    ctx.fill();
-
-    // Upper white canine fangs when mouth open
-    if (bear.jawOpen > 0.14) {
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(31, 1);
-      ctx.lineTo(33, 6.2);
-      ctx.lineTo(35, 1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(25, 1.2);
-      ctx.lineTo(26.5, 4.4);
-      ctx.lineTo(28, 1.2);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Dark mouth lip line
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(19, 1.8);
-    ctx.quadraticCurveTo(29, 2.4, 38, 1.0);
-    ctx.stroke();
-
-    // Near rounded fur-tufted ear
-    ctx.fillStyle = '#fdfbf7';
-    ctx.beginPath();
-    ctx.arc(9.5, -13.5, 5.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#cbd5e1';
-    ctx.beginPath();
-    ctx.arc(10.5, -13.2, 2.8, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Dark leathery wet nose with crisp specular catchlight
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.ellipse(39.2, -5.2, 4.0, 3.2, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(224, 242, 254, 0.72)';
-    ctx.beginPath();
-    ctx.ellipse(38.4, -6.4, 1.5, 0.9, -0.2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Expressive attentive eye + brow ridge
-    const ex = 23.5;
-    const ey = -7.8;
-    if (bear.blinkTimer > 0 && bear.mode === 'wait') {
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(ex - 2.4, ey);
-      ctx.lineTo(ex + 2.4, ey);
-      ctx.stroke();
-    } else if (bear.mode === 'chompChew' || bear.mode === 'chompLick') {
-      // Satisfied squint while chewing/licking
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      ctx.arc(ex, ey + 1, 2.6, Math.PI * 1.15, Math.PI * 1.85);
-      ctx.stroke();
-    } else {
-      ctx.fillStyle = '#0f172a';
-      ctx.beginPath();
-      ctx.arc(ex, ey, 2.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(ex - 0.7, ey - 0.8, 0.85, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Furrowed brow on grumble
-      if (bear.mode === 'grumble') {
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(ex - 3.5, ey - 4.2);
-        ctx.lineTo(ex + 3.2, ey - 2.0);
-        ctx.stroke();
-      }
-    }
-
-    ctx.restore();
-  }
-
-  /** @private */
-  _drawBreathClouds(ctx) {
-    for (let i = 0; i < this._breathClouds.length; i += 1) {
-      const bc = this._breathClouds[i];
-      const alpha = clamp((bc.life / bc.maxLife) * 0.34, 0, 0.34);
-      const grad = ctx.createRadialGradient(bc.x, bc.y, 1, bc.x, bc.y, bc.r);
-      grad.addColorStop(0, `rgba(224, 242, 254, ${alpha.toFixed(2)})`);
-      grad.addColorStop(1, 'rgba(224, 242, 254, 0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(bc.x, bc.y, bc.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /** @private */
-  _drawParticles(ctx) {
-    for (let i = 0; i < this._particles.length; i += 1) {
-      const pt = this._particles[i];
-      const alpha = clamp(pt.life / pt.maxLife, 0, 1);
-
-      if (pt.kind === 'snowPuff') {
-        const grad = ctx.createRadialGradient(pt.x, pt.y, 0.5, pt.x, pt.y, pt.size);
-        grad.addColorStop(0, pt.color);
-        grad.addColorStop(1, 'rgba(224, 242, 254, 0)');
-        ctx.save();
-        ctx.globalAlpha = alpha * 0.85;
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else if (pt.kind === 'shard') {
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.translate(pt.x, pt.y);
-        ctx.rotate(pt.rot);
-        ctx.fillStyle = pt.color;
-        ctx.beginPath();
-        ctx.moveTo(0, -pt.size);
-        ctx.lineTo(pt.size * 0.65, 0);
-        ctx.lineTo(0, pt.size * 0.9);
-        ctx.lineTo(-pt.size * 0.55, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      } else if (pt.kind === 'feather') {
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.translate(pt.x, pt.y);
-        ctx.rotate(pt.rot);
-        ctx.fillStyle = pt.color;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, pt.size, pt.size * 0.36, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else if (pt.kind === 'sparkle') {
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.translate(pt.x, pt.y);
-        ctx.fillStyle = pt.color;
-        const r = pt.size;
-        ctx.beginPath();
-        ctx.moveTo(0, -r);
-        ctx.quadraticCurveTo(0, 0, r, 0);
-        ctx.quadraticCurveTo(0, 0, 0, r);
-        ctx.quadraticCurveTo(0, 0, -r, 0);
-        ctx.quadraticCurveTo(0, 0, 0, -r);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      } else {
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = pt.color;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        default:
+          break;
       }
     }
   }
 
   /** @private */
-  _drawCalloutBadge(ctx) {
-    const bear = this._bear;
-    if (!bear.bubbleText) return;
+  _drawLighting(fb, t) {
+    // Volumetric moonlight shafts falling into the cave
+    const shafts = [[150, 22, 0], [268, 15, 1.7], [362, 26, 3.1]];
+    for (const [sx, sw, ph] of shafts) {
+      const inten = 0.26 * (0.8 + 0.2 * Math.sin(t * 0.7 + ph));
+      for (let y = DECK_BOTTOM; y < FLOOR_Y + 3; y += 1) {
+        const xl = sx - (y - DECK_BOTTOM) * 0.32;
+        const vf = 1 - (y - DECK_BOTTOM) / 112;
+        for (let x = Math.floor(xl); x < xl + sw; x += 1) {
+          const e = Math.sin((Math.PI * (x - xl)) / sw);
+          if (bay(x, y) < inten * e * vf * 16) mapPx(fb, x, y, MAP_MOON);
+        }
+      }
+    }
 
-    const text = bear.bubbleText;
-    ctx.save();
-    ctx.font = '800 16px system-ui, -apple-system, Segoe UI, sans-serif';
-    const textW = ctx.measureText(text).width;
-    const boxW = Math.max(66, textW + 26);
-    const boxH = 30;
-    const cx = clamp(bear.x + bear.dir * 32, boxW / 2 + 12, CANVAS_W - boxW / 2 - 12);
-    const bx = cx - boxW / 2;
-    const by = FLOOR_Y - 106;
+    // Pulsing crystal glows
+    for (const cl of CRYSTAL_CLUSTERS) {
+      const pulse = 0.42 + 0.22 * Math.sin(t * 1.8 + cl.phase);
+      mapRadial(fb, cl.gx, cl.gy, cl.gr, cl.gr * 0.85, pulse, MAP_TEAL);
+    }
 
-    // Soft drop shadow
-    ctx.shadowColor = 'rgba(4, 11, 24, 0.55)';
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetY = 4;
+    // Warm lantern light pools (tint nearby penguins & snow)
+    for (let k = 0; k < LANTERNS.length; k += 1) {
+      const L = LANTERNS[k];
+      const fl = 0.5 + 0.5 * Math.sin(t * 13 + k * 2) * Math.sin(t * 7.3 + k);
+      const R = 44 + fl * 4;
+      mapRadial(fb, L.x, L.y + 4, R, R * 0.85, 0.7 + fl * 0.12, MAP_WARM);
+      mapRadial(fb, L.x, L.y + 1, 9, 9, 0.9, MAP_WARM);
+    }
 
-    traceRoundedRect(ctx, bx, by, boxW, boxH, 12);
-    ctx.fillStyle = bear.bubbleBg;
-    ctx.fill();
+    // Drifting fog bands near the cave floor
+    for (let y = 170; y < 202; y += 1) {
+      const fall = 1 - Math.abs(y - 187) / 16;
+      if (fall <= 0) continue;
+      for (let x = 0; x < W; x += 1) {
+        const d = fall * (0.5 + 0.5 * Math.sin(x * 0.045 + t * 0.5 + Math.sin(y * 0.3))) * (0.6 + 0.4 * Math.sin(x * 0.013 - t * 0.3));
+        if (bay(x, y) < d * 0.42 * 16) mapPx(fb, x, y, MAP_FOG);
+      }
+    }
+  }
 
-    ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = bear.bubbleColor;
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    // Pointer tail
-    ctx.beginPath();
-    ctx.moveTo(cx - 7, by + boxH - 1);
-    ctx.lineTo(cx, by + boxH + 8);
-    ctx.lineTo(cx + 7, by + boxH - 1);
-    ctx.closePath();
-    ctx.fillStyle = bear.bubbleBg;
-    ctx.fill();
-
-    // Crisp callout text
-    ctx.fillStyle = bear.bubbleColor;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, cx, by + boxH / 2 + 0.5);
-    ctx.restore();
+  /** @private */
+  _drawBadges(fb) {
+    const b = this._bear;
+    if (!b.bubbleText) return;
+    const age = b.bubbleMax - b.bubbleTimer;
+    const s = age < 0.05 ? 1 : age < 0.13 ? 3 : 2;
+    const cx = clamp(Math.round(b.x + b.dir * 30), 34, W - 34);
+    const cy = FLOOR_Y - 60 - Math.min(3, Math.floor(age * 6));
+    if (b.bubbleText === 'NOM!') {
+      drawBadge(fb, 'NOM!', cx, cy, s, P[50], P[49], P[54], P[43], P[1]);
+    } else {
+      drawBadge(fb, b.bubbleText, cx, cy, s, P[28], P[27], P[25], P[43], P[1]);
+    }
   }
 }
