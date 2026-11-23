@@ -21,7 +21,7 @@ const STYLE_ID = 'iq-penguin-arena-styles-canva-16bit';
 const W = 396;
 const H = 224;
 
-const BRIDGE_Y = 68; // Penguin feet level on top of the individual hatches on the new high bridge
+const BRIDGE_Y = 66; // Penguin feet level standing on the 10 Canva-painted wooden trapdoor hatches
 const FLOOR_Y = 199; // Snow floor level inside ISHULEN where falling penguins land
 const BEAR_FLOOR_Y = 203; // Polar bear paw contact level on the wide snowy cave floor
 const GRAVITY = 520; // px/s² in 396×224 space
@@ -31,9 +31,9 @@ const SLOT_L = 34;
 const SLOT_R = 362;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=5',
-  bear: './assets/canva-bear.png?v=5',
-  penguin: './assets/canva-penguin.png?v=5',
+  bg: './assets/canva-bg.png?v=6',
+  bear: './assets/canva-bear.png?v=6',
+  penguin: './assets/canva-penguin.png?v=6',
 };
 
 const BEAR_CELL_W = 110;
@@ -775,23 +775,20 @@ export class PenguinArena {
 
   /** @private */
   _spawnChompBurst(x, y) {
-    // 26+ snow and feather particles on chomp!
-    this._spawnSnowBurst(x, y, 18);
-    const featherColors = [PAL.pNavyLo, PAL.snowHi, PAL.pGoldHi, PAL.pNavyHi, PAL.pBeakHi];
-    for (let i = 0; i < 14; i += 1) {
-      const ang = -Math.PI * 0.12 - Math.random() * Math.PI * 0.76;
-      const sp = 30 + Math.random() * 58;
+    // Clean snow puff burst on chomp (no rectangular feather debris!)
+    this._spawnSnowBurst(x, y, 16);
+    for (let i = -1; i <= 1; i += 1) {
       this._addParticle({
-        kind: 'feather',
-        x: x + (Math.random() - 0.5) * 12,
-        y: y - 8,
-        vx: Math.cos(ang) * sp,
-        vy: Math.sin(ang) * sp - 16,
-        g: 36,
-        sway: Math.random() * Math.PI * 2,
-        life: 0.92 + Math.random() * 0.45,
-        max: 1.37,
-        color: featherColors[i % featherColors.length],
+        kind: 'puff',
+        x: x + i * 7,
+        y: y - 2,
+        vx: i * 18,
+        vy: -9,
+        g: 0,
+        r: 4,
+        life: 0.42,
+        max: 0.42,
+        color: PAL.snowHi,
       });
     }
   }
@@ -956,19 +953,19 @@ export class PenguinArena {
         p.vy += GRAVITY * dt;
         p.y += p.vy * dt;
 
-        // Trailing white/navy feather pixels while falling
-        if (Math.random() < dt * 26) {
+        // Subtle trailing snow pixels while falling
+        if (Math.random() < dt * 14) {
           this._addParticle({
-            kind: 'feather',
-            x: p.x + (Math.random() - 0.5) * 10,
-            y: p.y - 14,
-            vx: (Math.random() - 0.5) * 24,
-            vy: -12 - Math.random() * 15,
-            g: 28,
-            sway: Math.random() * Math.PI * 2,
-            life: 0.55 + Math.random() * 0.25,
-            max: 0.8,
-            color: Math.random() < 0.5 ? PAL.snowHi : PAL.pNavyHi,
+            kind: 'snow',
+            x: p.x + (Math.random() - 0.5) * 8,
+            y: p.y - 16,
+            vx: (Math.random() - 0.5) * 18,
+            vy: -10 - Math.random() * 12,
+            g: 30,
+            size: 1,
+            life: 0.35 + Math.random() * 0.2,
+            max: 0.55,
+            color: PAL.snowHi,
           });
         }
 
@@ -1289,67 +1286,53 @@ export class PenguinArena {
   }
 
   /**
-   * Draws all 10 individual penguin hatches (`luker`) along the bridge deck (y = 68..82):
-   * - When CLOSED (`angle <= 2°`): clearly renders each penguin's individual wooden & iron-bound hatch door
-   *   with plank seams, frost top edge, left brass hinge pin, and right latch bolt so every penguin visibly stands on its own hatch!
-   * - When OPEN (`angle > 2°`): cuts a clear dark cavern shaft all the way through the bridge deck (y = 67..84)
-   *   and swings the wooden hatch door downward around its left hinge into the cave below!
+   * Renders the opening trapdoor hatches (`luker`) along the Canva-painted bridge deck (y = 58..76):
+   * - When CLOSED (`angle <= 2°`): the authentic Canva-painted wooden trapdoor hatches in `canva-bg.png`
+   *   show through 100% untouched!
+   * - When OPEN (`angle > 2°`): cuts a clear dark cavern shaft all the way through the bridge deck (y = 58..76)
+   *   at that penguin's exact hatch position and swings the wooden hatch door downward around its left hinge!
    * @private
    */
   _drawTrapdoorCutouts(ctx) {
-    const hatchY = BRIDGE_Y; // 68 (top of bridge deck where penguin feet stand)
-    const hatchH = 14;       // 68..82 (full thickness of the bridge deck & wooden beam)
+    const hatchY = 58; // Top of the Canva-painted trapdoor hatch in 396×224 space (29 * 2)
+    const hatchH = 18; // Full thickness of the Canva bridge deck & beam (y = 58..76)
 
     for (let i = 0; i < this._trapdoors.length; i += 1) {
       const d = this._trapdoors[i];
-      const hatchW = d.w; // ~28px wide individual hatch per penguin
+      if (d.angle <= 2) {
+        // Closed hatch is painted directly into the Canva background (`canva-bg.png`)!
+        continue;
+      }
+
+      const hatchW = 26; // Matches the 13px (26px at 2×) Canva-painted hatch width
       const hatchX = Math.round(d.slotX - hatchW / 2);
 
-      if (d.angle <= 2) {
-        // CLOSED HATCH: Every penguin clearly stands on its own distinct hinged bridge hatch!
-        // Outer dark iron frame
-        fillRectPx(ctx, hatchX, hatchY, hatchW, hatchH, PAL.outline);
-        // Frost/ice top lip where penguin feet rest
-        fillRectPx(ctx, hatchX + 1, hatchY + 1, hatchW - 2, 2, '#cceeff');
-        fillRectPx(ctx, hatchX + 1, hatchY + 3, hatchW - 2, 1, '#68b5e8');
-        // Warm oak hatch planks inside the frame
-        fillRectPx(ctx, hatchX + 1, hatchY + 4, hatchW - 2, hatchH - 5, PAL.oakMid);
-        fillRectPx(ctx, hatchX + 2, hatchY + 5, hatchW - 4, hatchH - 7, PAL.oakWarm);
-        // Vertical plank dividers inside the hatch
-        const third = Math.floor(hatchW / 3);
-        fillRectPx(ctx, hatchX + third, hatchY + 4, 1, hatchH - 5, PAL.oakDark);
-        fillRectPx(ctx, hatchX + third * 2, hatchY + 4, 1, hatchH - 5, PAL.oakDark);
-        // Left brass hinge & right iron latch bolt
-        fillRectPx(ctx, hatchX + 2, hatchY + 6, 2, 3, '#ffd042');
-        fillRectPx(ctx, hatchX + hatchW - 4, hatchY + 7, 2, 2, PAL.boltHi);
-      } else {
-        // OPEN HATCH: Cut a clear dark cavern shaft all the way through the bridge deck!
-        fillRectPx(ctx, hatchX, hatchY - 1, hatchW, hatchH + 2, '#071b3e');
-        fillRectPx(ctx, hatchX + 2, hatchY - 1, hatchW - 4, hatchH + 2, '#0a2452');
+      // OPEN HATCH: Cut a clear dark cavern shaft all the way through the bridge deck!
+      fillRectPx(ctx, hatchX, hatchY, hatchW, hatchH, '#04122c');
+      fillRectPx(ctx, hatchX + 2, hatchY, hatchW - 4, hatchH, '#071b3e');
 
-        // Sturdy iron/oak side jambs framing the open shaft
-        fillRectPx(ctx, hatchX - 1, hatchY, 2, hatchH, PAL.outline);
-        fillRectPx(ctx, hatchX, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
-        fillRectPx(ctx, hatchX + hatchW - 1, hatchY, 2, hatchH, PAL.outline);
-        fillRectPx(ctx, hatchX + hatchW - 1, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
+      // Sturdy iron/oak side jambs framing the open shaft
+      fillRectPx(ctx, hatchX - 1, hatchY, 2, hatchH, PAL.outline);
+      fillRectPx(ctx, hatchX, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
+      fillRectPx(ctx, hatchX + hatchW - 1, hatchY, 2, hatchH, PAL.outline);
+      fillRectPx(ctx, hatchX + hatchW - 1, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
 
-        // Swinging wooden hatch door rotating downward (0° -> 88°) into the cavern from left hinge
-        const rad = (d.angle * Math.PI) / 180;
-        const cosA = Math.cos(rad);
-        const sinA = Math.sin(rad);
-        const hx = hatchX + 1;
-        const hy = hatchY + hatchH - 2;
-        const leafLen = hatchW - 2;
+      // Swinging wooden hatch door rotating downward (0° -> 88°) into the cavern from left hinge
+      const rad = (d.angle * Math.PI) / 180;
+      const cosA = Math.cos(rad);
+      const sinA = Math.sin(rad);
+      const hx = hatchX + 1;
+      const hy = hatchY + hatchH - 3;
+      const leafLen = hatchW - 2;
 
-        for (let u = 0; u < leafLen; u += 1) {
-          const px = Math.round(hx + u * cosA);
-          const py = Math.round(hy + u * sinA);
-          fillRectPx(ctx, px - 2, py - 1, 4, 3, PAL.outline);
-          fillRectPx(ctx, px - 1, py, 2, 2, u % 5 === 0 ? PAL.oakDark : PAL.oakWarm);
-        }
-        // Brass hinge pin at pivot point
-        fillRectPx(ctx, hx, hy - 1, 2, 2, '#ffd042');
+      for (let u = 0; u < leafLen; u += 1) {
+        const px = Math.round(hx + u * cosA);
+        const py = Math.round(hy + u * sinA);
+        fillRectPx(ctx, px - 2, py - 1, 4, 3, PAL.outline);
+        fillRectPx(ctx, px - 1, py, 2, 2, u % 5 === 0 ? PAL.oakDark : PAL.oakWarm);
       }
+      // Brass hinge pin at pivot point
+      fillRectPx(ctx, hx, hy - 1, 2, 2, '#ffd042');
     }
   }
 
