@@ -4,71 +4,234 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IQ-app</title>
-  <meta name="description" content="Velg mellom hoderegning og kartquiz om Trøndelag.">
+  <meta name="description" content="Velg mellom hoderegning med pingvin- og isbjørnutfordringen eller kartquiz om Trøndelags 38 kommuner.">
+  <link rel="stylesheet" href="./styles/shared.css">
   <style>
-    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      min-height: 100svh;
       display: grid;
       place-items: center;
-      background: #f8fafc;
-      color: #0f172a;
-      font: 1rem/1.5 system-ui, sans-serif;
-      padding: 1.5rem;
+      padding: clamp(1.25rem, 4vw, 2.5rem);
     }
-    main { width: min(100%, 48rem); }
+
+    main {
+      width: min(100%, 52rem);
+    }
+
+    .hero {
+      margin-bottom: 1.75rem;
+    }
+
     h1 {
-      margin: 0 0 1.5rem;
-      font-size: clamp(2.5rem, 8vw, 4.5rem);
-      letter-spacing: -.065em;
+      margin: 0 0 0.5rem;
+      font-size: clamp(2.5rem, 7vw, 4.25rem);
+      letter-spacing: -0.055em;
       line-height: 1.05;
+      color: var(--ink);
     }
-    nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
-    .tile {
+
+    .lead {
+      margin: 0;
+      font-size: clamp(1rem, 2.2vw, 1.125rem);
+      color: var(--ink-muted);
+      max-width: 38rem;
+    }
+
+    .subject-grid {
       display: grid;
-      grid-template-columns: 1fr auto;
-      align-content: space-between;
-      min-height: 13rem;
-      gap: 1rem;
-      padding: 1.5rem;
-      border-radius: 1.25rem;
-      color: #fff;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.125rem;
+    }
+
+    .tile {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 15.5rem;
+      min-width: 44px;
+      gap: 1.25rem;
+      padding: 1.625rem;
+      border-radius: var(--radius-lg);
+      color: #ffffff;
       text-decoration: none;
-      transition: background-color .15s ease;
+      box-shadow: var(--shadow-md);
+      transition: background-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
     }
-    .math { background: #115e59; }
-    .math:hover { background: #134e4a; }
-    .geo { background: #1e40af; }
-    .geo:hover { background: #1e3a8a; }
-    .tile:focus-visible { outline: 3px solid #0f172a; outline-offset: 4px; }
-    .icon { font-size: 2rem; line-height: 1; }
-    .arrow { font-size: 1.5rem; line-height: 1; }
-    .copy { grid-column: 1 / -1; }
-    strong { display: block; font-size: 1.75rem; letter-spacing: -.035em; }
-    .description { display: block; }
-    @media (max-width: 36rem) {
-      nav { grid-template-columns: 1fr; }
-      .tile { min-height: 10rem; }
+
+    .tile:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
     }
-    @media (prefers-reduced-motion: reduce) { .tile { transition: none; } }
+
+    .tile:active {
+      transform: translateY(0);
+    }
+
+    .tile:focus-visible {
+      outline: 3px solid var(--ink);
+      outline-offset: 4px;
+    }
+
+    .tile-math {
+      background: var(--math);
+    }
+
+    .tile-math:hover {
+      background: var(--math-hover);
+    }
+
+    .tile-geo {
+      background: var(--geo);
+    }
+
+    .tile-geo:hover {
+      background: var(--geo-hover);
+    }
+
+    .tile-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .icon {
+      font-size: 2rem;
+      line-height: 1;
+    }
+
+    .arrow {
+      font-size: 1.5rem;
+      line-height: 1;
+      transition: transform 0.15s ease;
+    }
+
+    .tile:hover .arrow {
+      transform: translate(2px, -2px);
+    }
+
+    .tile-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .tile-title {
+      display: block;
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+
+    .tile-description {
+      display: block;
+      font-size: 0.975rem;
+      line-height: 1.45;
+      color: rgba(255, 255, 255, 0.94);
+    }
+
+    .tile-badge {
+      align-self: flex-start;
+      margin-top: 0.375rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.34);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      color: #ffffff;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .tile-badge[hidden] {
+      display: none;
+    }
+
+    @media (max-width: 38rem) {
+      .subject-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .tile {
+        min-height: 12.5rem;
+        padding: 1.375rem;
+      }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>IQ-app</h1>
-    <nav aria-label="Velg fag">
-      <a class="tile math" href="./matte.html">
-        <span class="icon" aria-hidden="true">±</span>
-        <span class="arrow" aria-hidden="true">↗</span>
-        <span class="copy"><strong>Matte</strong><span class="description">Øv på hoderegning.</span></span>
+    <header class="hero">
+      <h1>IQ-app</h1>
+      <p class="lead">Velg fag for å trene hoderegning eller utforske Trøndelag på kartet.</p>
+    </header>
+
+    <nav class="subject-grid" aria-label="Velg fag">
+      <a class="tile tile-math" href="./matte.html">
+        <span class="tile-top">
+          <span class="icon" aria-hidden="true">±</span>
+          <span class="arrow" aria-hidden="true">↗</span>
+        </span>
+        <span class="tile-body">
+          <strong class="tile-title">Matte</strong>
+          <span class="tile-description">Tren hoderegning og ta pingvin- og isbjørnutfordringen!</span>
+          <span class="tile-badge" id="math-best-badge" hidden></span>
+        </span>
       </a>
-      <a class="tile geo" href="./geografi.html">
-        <span class="icon" aria-hidden="true">◎</span>
-        <span class="arrow" aria-hidden="true">↗</span>
-        <span class="copy"><strong>Geografi</strong><span class="description">Finn kommunene i Trøndelag på kartet.</span></span>
+
+      <a class="tile tile-geo" href="./geografi.html">
+        <span class="tile-top">
+          <span class="icon" aria-hidden="true">◎</span>
+          <span class="arrow" aria-hidden="true">↗</span>
+        </span>
+        <span class="tile-body">
+          <strong class="tile-title">Geografi</strong>
+          <span class="tile-description">Trøndelags 38 kommuner med interaktivt kart, hint og fakta.</span>
+          <span class="tile-badge" id="geo-best-badge" hidden></span>
+        </span>
       </a>
     </nav>
   </main>
+
+  <script type="module">
+    import {
+      STORAGE_KEYS,
+      loadJson,
+      sanitizeMathAttempts,
+      sanitizeGeoHistory
+    } from "./js/storage.js";
+
+    function pickBestEntry(entries) {
+      return entries.reduce((best, entry) => {
+        if (!best) return entry;
+        const bestRatio = best.score / best.total;
+        const entryRatio = entry.score / entry.total;
+        if (entryRatio > bestRatio) return entry;
+        if (entryRatio === bestRatio && entry.score > best.score) return entry;
+        return best;
+      }, null);
+    }
+
+    const mathAttempts = sanitizeMathAttempts(
+      loadJson(STORAGE_KEYS.MATH_ATTEMPTS, [], Array.isArray)
+    );
+    const mathBadge = document.getElementById("math-best-badge");
+    if (mathBadge && mathAttempts.length > 0) {
+      const best = pickBestEntry(mathAttempts);
+      const countLabel = mathAttempts.length === 1 ? "1 runde" : `${mathAttempts.length} runder`;
+      mathBadge.textContent = `Beste: ${best.score}/${best.total} · ${countLabel}`;
+      mathBadge.hidden = false;
+    }
+
+    const geoHistory = sanitizeGeoHistory(
+      loadJson(STORAGE_KEYS.GEO_HISTORY, [], Array.isArray)
+    );
+    const geoBadge = document.getElementById("geo-best-badge");
+    if (geoBadge && geoHistory.length > 0) {
+      const best = pickBestEntry(geoHistory);
+      geoBadge.textContent = `Beste: ${best.score}/${best.total} · ${geoHistory.length} spill`;
+      geoBadge.hidden = false;
+    }
+  </script>
 </body>
 </html>
