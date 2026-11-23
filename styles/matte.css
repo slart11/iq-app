@@ -128,18 +128,20 @@
 .diff-group {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
+/* 16-Bit Pixel Arctic Buttons (matching the Penguin & Polar Bear scene) */
 .diff-btn {
-  min-height: 60px;
+  position: relative;
+  min-height: 58px;
   padding: 0 0.25rem;
-  border-radius: 0.875rem;
-  border: 3px solid transparent;
+  border-radius: 6px;
+  border: 3px solid #141020;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 1.9rem;
+  font-size: 1.85rem;
   font-weight: 900;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   line-height: 1;
   cursor: pointer;
   touch-action: manipulation;
@@ -148,63 +150,48 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
-  transition: transform 0.12s ease, opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.06s steps(2), opacity 0.12s ease, box-shadow 0.06s steps(2);
 }
 
 .diff-btn.diff-single {
-  background: #10b981;
+  background: #16a34a;
   color: #ffffff;
-  opacity: 0.55;
+  box-shadow: inset 0 4px 0 #4ade80, inset 0 -5px 0 #15803d, 0 4px 0 #141020;
+  text-shadow: 2px 2px 0 #141020;
+  opacity: 0.45;
 }
 
 .diff-btn.diff-double {
   background: #facc15;
-  color: #1e293b;
-  opacity: 0.6;
+  color: #141020;
+  box-shadow: inset 0 4px 0 #fef08a, inset 0 -5px 0 #ca8a04, 0 4px 0 #141020;
+  text-shadow: 0 1px 0 #fef9c3;
+  opacity: 0.45;
 }
 
 .diff-btn.diff-triple {
-  background: #ef4444;
+  background: #e11d48;
   color: #ffffff;
-  opacity: 0.55;
+  box-shadow: inset 0 4px 0 #fb7185, inset 0 -5px 0 #9f1239, 0 4px 0 #141020;
+  text-shadow: 2px 2px 0 #141020;
+  opacity: 0.45;
 }
 
 .diff-btn:hover {
-  opacity: 0.95;
-  transform: scale(1.03);
+  opacity: 0.92;
 }
 
 .diff-btn:active {
-  transform: scale(0.96);
+  transform: translateY(3px);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 1px 0 #141020;
 }
 
-/* Selected active states — crisp dark border, full opacity & pop */
-.diff-btn[aria-pressed="true"].diff-single {
-  background: #10b981;
-  color: #ffffff;
-  opacity: 1;
-  border-color: #1e293b;
-  transform: scale(1.04);
-  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.35);
-}
-
-.diff-btn[aria-pressed="true"].diff-double {
-  background: #facc15;
-  color: #1e293b;
-  opacity: 1;
-  border-color: #1e293b;
-  transform: scale(1.04);
-  box-shadow: 0 6px 14px rgba(250, 204, 21, 0.42);
-}
-
+/* Selected active states — full vibrant color & crisp pixel outline */
+.diff-btn[aria-pressed="true"].diff-single,
+.diff-btn[aria-pressed="true"].diff-double,
 .diff-btn[aria-pressed="true"].diff-triple {
-  background: #ef4444;
-  color: #ffffff;
   opacity: 1;
-  border-color: #1e293b;
-  transform: scale(1.04);
-  box-shadow: 0 6px 14px rgba(239, 68, 68, 0.35);
+  transform: translateY(-1px);
 }
 
 /* Relaxed / Untimed Toggle */
