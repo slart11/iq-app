@@ -22,8 +22,8 @@ const W = 396;
 const H = 224;
 
 const BRIDGE_Y = 66; // Penguin feet level standing on the 10 Canva-painted wooden trapdoor hatches
-const FLOOR_Y = 199; // Snow floor level inside ISHULEN where falling penguins land
-const BEAR_FLOOR_Y = 203; // Polar bear paw contact level on the wide snowy cave floor
+const FLOOR_Y = 211; // Snow floor level inside ISHULEN where falling penguins land
+const BEAR_FLOOR_Y = 214; // Polar bear paw contact level planted firmly on the snowy cave floor
 const GRAVITY = 520; // px/s² in 396×224 space
 const BEAR_HOME_X = 104;
 const BEAR_SPEED = 240; // px/s gallop sprint speed across the snow floor
@@ -31,9 +31,9 @@ const SLOT_L = 34;
 const SLOT_R = 362;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=8',
-  bear: './assets/canva-bear.png?v=8',
-  penguin: './assets/canva-penguin.png?v=8',
+  bg: './assets/canva-bg.png?v=10',
+  bear: './assets/canva-bear.png?v=10',
+  penguin: './assets/canva-penguin.png?v=10',
 };
 
 const BEAR_CELL_W = 110;
@@ -1287,14 +1287,14 @@ export class PenguinArena {
 
   /**
    * Renders the opening trapdoor hatches (`luker`) along the Canva-painted bridge deck (y = 58..76):
-   * - When CLOSED (`angle <= 2°`): the authentic Canva-painted wooden trapdoor hatches in `canva-bg.png`
+   * - When CLOSED (`angle <= 2°`): the authentic Canva-painted double-leaf wooden trapdoor hatches in `canva-bg.png`
    *   show through 100% untouched!
-   * - When OPEN (`angle > 2°`): cuts a clear dark cavern shaft all the way through the bridge deck (y = 58..76)
-   *   at that penguin's exact hatch position and swings the wooden hatch door downward around its left hinge!
+   * - When OPEN (`angle > 2°`): cuts a clear dark cavern shaft through the bridge deck (y = 58..76)
+   *   and swings BOTH left and right wooden trapdoor leaves downward (`0° -> 88°`) into the cavern below!
    * @private
    */
   _drawTrapdoorCutouts(ctx) {
-    const hatchY = 58; // Top of the Canva-painted trapdoor hatch in 396×224 space (29 * 2)
+    const hatchY = 58; // Top of the Canva-painted trapdoor hatch in 396×224 space
     const hatchH = 18; // Full thickness of the Canva bridge deck & beam (y = 58..76)
 
     for (let i = 0; i < this._trapdoors.length; i += 1) {
@@ -1304,35 +1304,62 @@ export class PenguinArena {
         continue;
       }
 
-      const hatchW = 26; // Matches the 13px (26px at 2×) Canva-painted hatch width
+      const hatchW = 26; // Matches the 26px Canva-painted double-leaf hatch width
       const hatchX = Math.round(d.slotX - hatchW / 2);
 
-      // OPEN HATCH: Cut a clear dark cavern shaft all the way through the bridge deck!
-      fillRectPx(ctx, hatchX, hatchY, hatchW, hatchH, '#04122c');
-      fillRectPx(ctx, hatchX + 2, hatchY, hatchW - 4, hatchH, '#071b3e');
+      // 1. Cut the open slot ONLY inside the bridge floor planks (y = 66..75), NOT into the top perspective surface!
+      //    This makes the trapdoor clearly open downward under the bridge deck instead of drawing a dark box above the bridge!
+      const slotY = 66;
+      const slotH = 9; // 66..75 (bridge beam & bottom edge)
+      fillRectPx(ctx, hatchX + 2, slotY, hatchW - 4, slotH, '#04132e');
+      fillRectPx(ctx, hatchX + 4, slotY + 1, hatchW - 8, slotH - 1, '#071c42');
+      // Wooden back-edge lip of the open hole at y = 65..66
+      fillRectPx(ctx, hatchX + 1, slotY - 1, hatchW - 2, 1, PAL.outline);
+      fillRectPx(ctx, hatchX + 2, slotY, hatchW - 4, 1, PAL.oakDark);
 
-      // Sturdy iron/oak side jambs framing the open shaft
-      fillRectPx(ctx, hatchX - 1, hatchY, 2, hatchH, PAL.outline);
-      fillRectPx(ctx, hatchX, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
-      fillRectPx(ctx, hatchX + hatchW - 1, hatchY, 2, hatchH, PAL.outline);
-      fillRectPx(ctx, hatchX + hatchW - 1, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
+      // Sturdy iron/oak side jambs framing the open slot (y = 65..75)
+      fillRectPx(ctx, hatchX + 1, slotY - 1, 2, slotH + 1, PAL.outline);
+      fillRectPx(ctx, hatchX + 2, slotY, 1, slotH - 1, PAL.oakMid);
+      fillRectPx(ctx, hatchX + hatchW - 3, slotY - 1, 2, slotH + 1, PAL.outline);
+      fillRectPx(ctx, hatchX + hatchW - 3, slotY, 1, slotH - 1, PAL.oakMid);
 
-      // Swinging wooden hatch door rotating downward (0° -> 88°) into the cavern from left hinge
+      // 2. Double-leaf wooden trapdoor hatches swinging DOWNWARD into the cavern from the underside of the bridge (hy = 74):
+      //    Left leaf pivots at left hinge (hxLeft) down-and-right; Right leaf pivots at right hinge (hxRight) down-and-left!
       const rad = (d.angle * Math.PI) / 180;
       const cosA = Math.cos(rad);
       const sinA = Math.sin(rad);
-      const hx = hatchX + 1;
-      const hy = hatchY + hatchH - 3;
-      const leafLen = hatchW - 2;
+      const hy = 74; // Underside of bridge deck beam
+      const hxLeft = hatchX + 2;
+      const hxRight = hatchX + hatchW - 3;
+      const leafLen = 14; // Each wooden door leaf hangs 14px downward below the bridge beam into the cavern!
 
+      // Draw Left Door Leaf swinging downward into the cavern
       for (let u = 0; u < leafLen; u += 1) {
-        const px = Math.round(hx + u * cosA);
+        const px = Math.round(hxLeft + u * cosA);
         const py = Math.round(hy + u * sinA);
-        fillRectPx(ctx, px - 2, py - 1, 4, 3, PAL.outline);
-        fillRectPx(ctx, px - 1, py, 2, 2, u % 5 === 0 ? PAL.oakDark : PAL.oakWarm);
+        fillRectPx(ctx, px - 2, py - 1, 5, 3, PAL.outline);
+        const isIronBand = u === 4 || u === 9 || u === leafLen - 1;
+        fillRectPx(ctx, px - 1, py, 3, 2, isIronBand ? PAL.boltLo : (u % 2 === 0 ? PAL.oakWarm : PAL.oakMid));
+        if (!isIronBand) {
+          fillRectPx(ctx, px, py, 1, 1, PAL.oakHi);
+        }
       }
-      // Brass hinge pin at pivot point
-      fillRectPx(ctx, hx, hy - 1, 2, 2, '#ffd042');
+
+      // Draw Right Door Leaf swinging downward into the cavern
+      for (let u = 0; u < leafLen; u += 1) {
+        const px = Math.round(hxRight - u * cosA);
+        const py = Math.round(hy + u * sinA);
+        fillRectPx(ctx, px - 2, py - 1, 5, 3, PAL.outline);
+        const isIronBand = u === 4 || u === 9 || u === leafLen - 1;
+        fillRectPx(ctx, px - 1, py, 3, 2, isIronBand ? PAL.boltLo : (u % 2 === 0 ? PAL.oakWarm : PAL.oakMid));
+        if (!isIronBand) {
+          fillRectPx(ctx, px, py, 1, 1, PAL.oakHi);
+        }
+      }
+
+      // Brass hinge pins at both left and right pivot points under the bridge
+      fillRectPx(ctx, hxLeft, hy - 1, 2, 2, '#ffd042');
+      fillRectPx(ctx, hxRight - 1, hy - 1, 2, 2, '#ffd042');
     }
   }
 
@@ -1362,7 +1389,8 @@ export class PenguinArena {
 
       if (p.status === 'idle') {
         cellIndex = 0;
-        yOffset = Math.round(Math.sin(t * 3.2 + p.phase) * 0.75);
+        // Feet stay 100% planted on the bridge hatch (zero whole-body up-and-down bobbing!)
+        yOffset = 0;
       } else if (p.status === 'cheer') {
         if (p.cheerDelay <= 0) {
           cellIndex = 1;
@@ -1403,17 +1431,48 @@ export class PenguinArena {
         if (flipDir < 0) {
           ctx.scale(-1, 1);
         }
-        ctx.drawImage(
-          pImg,
-          sx,
-          0,
-          PENGUIN_CELL_W,
-          PENGUIN_CELL_H,
-          -Math.round(PENGUIN_DRAW_W / 2),
-          0,
-          PENGUIN_DRAW_W,
-          PENGUIN_DRAW_H
-        );
+
+        if (cellIndex === 0 && p.status === 'idle') {
+          // 3-Slice Subtle Penguin Breathing Animation (feet stay 100% planted on the hatch!):
+          // Smooth breathing wave (0..1) with per-penguin phase offset so they breathe naturally
+          const breathWave = Math.max(0, Math.sin(t * 2.3 + p.phase));
+          const chestLiftY = -Math.round(breathWave); // 0 or -1px gentle chest & head rise on inhale
+          const bellyExpandW = Math.round(breathWave); // 0 or +1px gentle belly expansion on inhale
+          const halfW = Math.round(PENGUIN_DRAW_W / 2);
+
+          // Slice 1 (Bottom feet & lower tail: sy = 36..46, 10px) — 100% stationary planted on the hatch!
+          ctx.drawImage(
+            pImg,
+            sx, 36, PENGUIN_CELL_W, 10,
+            -halfW, 36, PENGUIN_DRAW_W, 10
+          );
+
+          // Slice 2 (Mid belly, chest & flippers: sy = 16..36, 20px) — gently rises -1px & expands +1px on inhale!
+          ctx.drawImage(
+            pImg,
+            sx, 16, PENGUIN_CELL_W, 20,
+            -halfW, 16 + chestLiftY, PENGUIN_DRAW_W + bellyExpandW, 20 - chestLiftY
+          );
+
+          // Slice 3 (Head, cheeks & beak: sy = 0..16, 16px) — gently rises -1px in sync with chest on inhale!
+          ctx.drawImage(
+            pImg,
+            sx, 0, PENGUIN_CELL_W, 16,
+            -halfW, chestLiftY, PENGUIN_DRAW_W, 16
+          );
+        } else {
+          ctx.drawImage(
+            pImg,
+            sx,
+            0,
+            PENGUIN_CELL_W,
+            PENGUIN_CELL_H,
+            -Math.round(PENGUIN_DRAW_W / 2),
+            0,
+            PENGUIN_DRAW_W,
+            PENGUIN_DRAW_H
+          );
+        }
         ctx.restore();
       } else {
         // Minimal fallback silhouette if image is still decoding
