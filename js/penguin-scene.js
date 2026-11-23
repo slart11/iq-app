@@ -1,42 +1,67 @@
 /**
- * Penguin Ice Bridge & Hungry Polar Bear Ice Cave (`ISHULEN`)
+ * Penguin Ice Bridge & Hungry Polar Bear Torchlit Crystal Cavern (`ISHULEN`)
  *
- * Clean, warm, cluster-shaded pixel-art scene inspired by *Roots of Pacha* and
- * *Stardew Valley*:
- * - Logical resolution: 320 × 144 pixels (`imageSmoothingEnabled = false`, CSS `image-rendering: pixelated`).
- * - ZERO Bayer/checkerboard dithering anywhere — every sky band, aurora ribbon,
- *   mountain facet, timber beam, ice block, crystal, and snowdrift uses clean,
- *   solid, harmonious colour clusters.
- * - ZERO procedural 3D normal-mapped blobs — all characters (`PENGUIN_SPRITES`
- *   14×16 and `BEAR_SPRITES` 36×22) are explicit, hand-authored ASCII pixel maps
- *   with selective outlines (`#232136`), readable cute faces, and distinct legs.
+ * Vibrant, high-detail storybook pixel-art scene (320 × 180 logical resolution,
+ * `imageSmoothingEnabled = false`, CSS `image-rendering: pixelated`, ZERO checkerboard dithering!):
+ *
+ * 1. **Large, Chunky Multi-Part Outlined Characters (`#141020` bold pixel outlines)**:
+ *    - **Emperor Penguins (`20 × 28` px each)**: Spaced across the bridge (`x = 29..291`, step `29px`)
+ *      at `bridgeY = 74`. Multi-part pixel anatomy where the plump teardrop torso (`16×20`),
+ *      rounded head (`12×10`), big expressive `2×3` eye + `1×1` white catchlight, golden-amber
+ *      collar & cheek patch (`#ffe066`, `#ffa62b`, `#d96518`), 3-tone orange beak (`#ffb733`,
+ *      `#f2741f`, `#b84314`), separately outlined navy flipper (`5×13`), and chunky orange webbed
+ *      feet (`4×3`) each have crisp `#141020` dark outlines!
+ *    - **Massive, Detailed Polar Bear (`70 × 44` px)**: Layered, individually outlined anatomical
+ *      parts inspired by classic 16/32-bit storybook pixel art:
+ *      - Layer 1: Far hind leg & far front leg with `#141020` outline, cool slate-blue fur (`#6c82a8`, `#8fa5c9`), and dark claws.
+ *      - Layer 2: Heavy sculpted torso (`48×26`), rump, tail, and muscular shoulder hump with shaggy fur tufts and 5 rich cluster bands (`#fffef7`, `#f5ebd8`, `#e6c89c` torch bounce, `#b8cae3`, `#8aa0c4`) + interior shoulder/haunch contour lines.
+ *      - Layer 3: Near hind leg (`14×20`) & near front leg (`13×20`) independently animated across 6 gallop phases, with shaggy elbow tufts, broad paws, 3 dark claws, and full `#141020` outlines overlapping the torso.
+ *      - Layer 4: Neck, rounded back & front ears (`#382b47` inner ear), expressive head (`20×16`) with shaggy cheek ruff, sloped snout, shiny `4×3` berry nose (`#181224` + `1×1` highlight), `3×3` eye + `1×1` white catchlight + heavy brow ridge, and articulated lower jaw (`chompOpen` reveals `#7a1c2e` mouth, `#f26b8a` tongue, and `#ffffff` canine fangs).
+ *
+ * 2. **Rich Storybook Environment (`320 × 180`)**:
+ *    - **Vibrant Royal-Blue Night Sky (`y = 0..74`)**: `#0c1938` → `#162f63` → `#234b91` → `#3870ba`
+ *      with a big golden crescent moon (`x = 272, y = 22, r = 13`), golden 4-point diamond stars,
+ *      and fluffy multi-tone billowy pixel clouds (`#f5f9ff`, `#bfd8f8`, `#7ba3d9`, `#466da6` with
+ *      dark `#152852` outlines) rolling behind chunky outlined snow-capped mountains.
+ *    - **Sturdy Timber & Ice Bridge (`y = 74..86`)**: Heavy outlined oak beams (`#4a2816`, `#754224`,
+ *      `#a66338`, `#cf8854`), iron bolts, snow cushions (`#fffdf5`, `#cde0f5`), hanging icicles,
+ *      hinged wooden trapdoors under each penguin, and warm hanging iron lanterns at both ends.
+ *    - **Torchlit Rocky Ice Cavern (`y = 86..180`)**: Chunky outlined warm brown/ochre rock blocks
+ *      (`#382115`, `#573420`, `#7d4d30`, `#a86d44`) & glacier-ice stone (`#283b5c`, `#3b5582`),
+ *      2 animated flickering wall torches (`x = 48, y = 112` and `x = 272, y = 112`), 3 bright
+ *      glowing cyan magic crystal clusters (`#e0ffff`, `#5ceeff`, `#17b8eb`, `#0d75ab` with `#141020`
+ *      outlines), and a snow-covered cave floor (`y = 154..180`) with warm torchlit highlights and bear pawprints.
  *
  * Pure state helpers (`createPenguinState`, `dropOnePenguin`, `celebratePenguins`)
  * have zero DOM/window dependencies and can be imported directly in Node.js tests.
  */
 
-const STYLE_ID = 'iq-penguin-arena-styles-pacha';
+const STYLE_ID = 'iq-penguin-arena-styles-storybook-v2';
 const W = 320;
-const H = 144;
+const H = 180;
 
-const BRIDGE_Y = 56; // penguin feet level on top of the bridge snow cushions
-const DECK_BOTTOM = 65; // underside of the bridge deck
-const FLOOR_Y = 128; // snow floor level inside ISHULEN where bear stands & penguins land
-const GRAVITY = 380; // px/s² in 320×144 space
-const BEAR_HOME_X = 68;
-const SLOT_L = 46;
-const SLOT_R = 274;
+const BRIDGE_Y = 74; // penguin feet level on top of the bridge snow cushions
+const DECK_BOTTOM = 86; // underside of the bridge timber & ice deck
+const FLOOR_Y = 154; // snow floor level inside ISHULEN where bear stands & penguins land
+const GRAVITY = 430; // px/s² in 320×180 space
+const BEAR_HOME_X = 64;
+const SLOT_L = 29;
+const SLOT_R = 291;
 
 const LANTERNS = [
-  { x: 25, y: 42, postX: 16, armDir: 1 },
-  { x: 295, y: 42, postX: 304, armDir: -1 },
+  { x: 14, y: 55, postX: 8, armDir: 1 },
+  { x: 306, y: 55, postX: 312, armDir: -1 },
+];
+
+const WALL_TORCHES = [
+  { x: 48, y: 112 },
+  { x: 272, y: 112 },
 ];
 
 const CRYSTAL_CLUSTERS = [
-  { x: 22, y: 118, dir: 1, scale: 1 },
-  { x: 138, y: 121, dir: 1, scale: 0.85 },
-  { x: 236, y: 121, dir: -1, scale: 0.85 },
-  { x: 298, y: 117, dir: -1, scale: 1 },
+  { x: 24, y: 151, dir: 1, scale: 1.0 },
+  { x: 160, y: 152, dir: 1, scale: 0.92 },
+  { x: 296, y: 151, dir: -1, scale: 1.0 },
 ];
 
 /* ==========================================================================
@@ -94,426 +119,114 @@ export function celebratePenguins(state) {
 }
 
 /* ==========================================================================
-   Warm Storybook Palette (Roots of Pacha / Stardew Valley — Zero Pure #000)
+   Vibrant Storybook Pixel Palette (Zero Checkerboard Dithering)
    ========================================================================== */
 
 const PAL = {
-  // Selective outlines
-  outlinePlum: '#232136',
-  outlineUmber: '#3a2624',
+  // Bold pixel outlines
+  outline: '#141020',
+  outlineSky: '#152852',
 
-  // Twilight sky bands
-  sky0: '#1d2038',
-  sky1: '#272c4a',
-  sky2: '#353e63',
-  sky3: '#475580',
+  // Vibrant royal-blue night sky bands
+  sky0: '#0c1938',
+  sky1: '#162f63',
+  sky2: '#234b91',
+  sky3: '#3870ba',
 
-  // Smooth Aurora ribbons
-  auroraMintHi: '#6ee7b7',
-  auroraMintLo: '#34d399',
-  auroraLavHi: '#c4b5fd',
-  auroraLavLo: '#8b5cf6',
+  // Big golden crescent moon & 4-point diamond stars
+  moonHi: '#fff3a1',
+  moonMid: '#ffd042',
+  moonLo: '#e69317',
+  moonDeep: '#d98218',
+  starCore: '#fff9cc',
+  starGold: '#ffd042',
+  starAmber: '#e69317',
 
-  // Moon & stars
-  moonCream: '#fffbeb',
-  moonGold: '#fde68a',
-  starBlue: '#bae6fd',
+  // Fluffy multi-tone billowy pixel clouds
+  cloudHi: '#f5f9ff',
+  cloudMid: '#bfd8f8',
+  cloudLo: '#7ba3d9',
+  cloudDeep: '#466da6',
 
-  // Mountains
-  mtnSnow: '#f8f5ec',
-  mtnMid: '#9db1d0',
-  mtnShadow: '#5a6d94',
-  mtnDeep: '#3e4c6e',
+  // Outlined snow-capped mountains
+  mtnSnowHi: '#fffdf5',
+  mtnSnowMid: '#d6e6fa',
+  mtnRockHi: '#789bc9',
+  mtnRockMid: '#4c6d9c',
+  mtnRockLo: '#2b436e',
 
-  // Timber & lanterns
-  woodDark: '#6e3b22',
-  woodMid: '#9c5a34',
-  woodHi: '#c98353',
-  trapDark: '#7c4326',
-  trapMid: '#a8623a',
-  brass: '#fbbf24',
-  flameCore: '#fffbeb',
-  flameGold: '#fbbf24',
-  flameAmber: '#f59e0b',
+  // Sturdy oak timber & ice bridge
+  oakDark: '#4a2816',
+  oakMid: '#754224',
+  oakWarm: '#a66338',
+  oakHi: '#cf8854',
+  boltHi: '#a9b8cf',
+  boltLo: '#4a576e',
+  iceHi: '#e6f7ff',
+  iceMid: '#8adeff',
+  iceLo: '#3ba3d9',
+  iceDeep: '#1e6499',
 
-  // Ice blocks & snow cushions
-  iceHi: '#e0f2fe',
-  iceMid: '#7dd3fc',
-  iceLo: '#38bdf8',
-  iceDeep: '#0284c7',
-  snowHi: '#faf6ed',
-  snowMid: '#dce6f5',
-  snowLo: '#aebfd9',
+  // Snow cushions & snow cave floor
+  snowHi: '#fffdf5',
+  snowTorch: '#ffe9b8',
+  snowMid: '#cde0f5',
+  snowLo: '#92b1d6',
+  snowDeep: '#5b7aa6',
 
-  // Cozy Ice Cave (ISHULEN)
-  caveBg: '#1b1e33',
-  caveArch0: '#262b47',
-  caveArch1: '#333b5e',
-  caveWall: '#3f4970',
+  // Warm torchlit rocky cavern & glacier stone blocks
+  caveVoid: '#130d18',
+  caveDeep: '#1f1421',
+  rockDark: '#382115',
+  rockMid: '#573420',
+  rockWarm: '#7d4d30',
+  rockHi: '#a86d44',
+  iceStoneLo: '#283b5c',
+  iceStoneHi: '#3b5582',
 
-  // Glowing mint-turquoise crystals
-  crystalLo: '#2dd4bf',
-  crystalMid: '#5eead4',
-  crystalHi: '#ccfbf1',
-};
+  // Flickering 4-tone pixel fire / torches
+  fireCore: '#fff799',
+  fireGold: '#ffbb33',
+  fireOrange: '#f26419',
+  fireRed: '#b82914',
 
-const PENGUIN_PALETTE = {
-  O: '#232136', // dark plum outline
-  D: '#323854', // dark slate back
-  B: '#4b5378', // blue-slate back highlight
-  W: '#faf6ed', // creamy white belly
-  S: '#cfd9ea', // soft belly shadow
-  G: '#fbbf24', // golden-apricot ear/neck patch
-  A: '#f59e0b', // warm amber chest fade
-  K: '#ea580c', // coral-orange beak & feet
-  E: '#1e1b2e', // eye
-  H: '#ffffff', // 1px eye sparkle
-};
+  // Bright glowing cyan magic crystal clusters
+  crystalCore: '#e0ffff',
+  crystalHi: '#5ceeff',
+  crystalMid: '#17b8eb',
+  crystalLo: '#0d75ab',
 
-const BEAR_PALETTE = {
-  O: '#232136', // dark warm indigo outline
-  W: '#faf6ed', // warm cream-white top fur highlight
-  F: '#eef2f8', // main snow-white fur
-  M: '#cbd6e8', // soft periwinkle mid-shadow cluster (neck/belly/haunch modeling)
-  S: '#9bb0ce', // deeper blue-grey shadow for far-side legs & underbelly
-  N: '#2b2130', // dark berry nose, eye & claws
-  H: '#ffffff', // 1px eye & nose catchlight
-  P: '#f43f5e', // pink open mouth / tongue
-  T: '#ffffff', // teeth
-};
+  // Emperor Penguin anatomy (20×28)
+  pNavyLo: '#1d284d',
+  pNavyMid: '#2e4075',
+  pNavyHi: '#4b67ab',
+  pGoldHi: '#ffe066',
+  pGoldMid: '#ffa62b',
+  pGoldLo: '#d96518',
+  pBellyHi: '#fffdf5',
+  pBellyMid: '#d9e4f5',
+  pBellyLo: '#9fb4d4',
+  pBeakHi: '#ffb733',
+  pBeakMid: '#f2741f',
+  pBeakLo: '#b84314',
 
-/* ==========================================================================
-   Hand-Crafted String-Grid Sprites
-   - PENGUIN_SPRITES: every frame is 16 rows × 14 columns
-   - BEAR_SPRITES: every frame is 22 rows × 36 columns
-   ========================================================================== */
-
-export const PENGUIN_SPRITES = {
-  idle0: [
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDBBBBHEO..',
-    '..ODGGGGEEEO..',
-    '..ODGAAWWWKKO.',
-    '..ODDWWWWWWKO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBSWWWWWDO.',
-    '.ODDDSSWWWWDO.',
-    '..ODDSSWWWDO..',
-    '..ODDSSWWWDO..',
-    '...ODSSSSDO...',
-    '...OKKOOKKO...',
-    '...OOOO.OOOO..',
-  ],
-  idle1: [
-    '..............',
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDBBBBHEO..',
-    '..ODGGGGEEEO..',
-    '..ODGAAWWWKKO.',
-    '.ODDBWWWWWWKO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBSWWWWWDO.',
-    '.ODDDSSWWWWDO.',
-    '..ODDSSWWWDO..',
-    '..ODDSSWWWDO..',
-    '...ODSSSSDO...',
-    '...OKKOOKKO...',
-    '...OOOO.OOOO..',
-  ],
-  blink: [
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDBBBBSSO..',
-    '..ODGGGGOOOO..',
-    '..ODGAAWWWKKO.',
-    '..ODDWWWWWWKO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBWWWWWWDO.',
-    '.ODDBSWWWWWDO.',
-    '.ODDDSSWWWWDO.',
-    '..ODDSSWWWDO..',
-    '..ODDSSWWWDO..',
-    '...ODSSSSDO...',
-    '...OKKOOKKO...',
-    '...OOOO.OOOO..',
-  ],
-  cheer: [
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDBBBBHEO..',
-    '..ODGGGGEEEO..',
-    'O.ODGAAWWWKKO.',
-    'ODODDWWWWWWKOO',
-    'ODBBBWWWWWWBDO',
-    '.ODBBWWWWWWBO.',
-    '..ODBWWWWWWDO.',
-    '..ODBSWWWWWDO.',
-    '..ODDSSWWWWDO.',
-    '..ODDSSWWWDO..',
-    '...ODSSSSDO...',
-    '...OKKO.OKKO..',
-    '...OOOO.OOOO..',
-    '..............',
-  ],
-  panic: [
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDWWWWHEO..',
-    '..ODGGGGHEEOO.',
-    'O.ODGAAWWWKKKO',
-    'ODODDWWWWWWOO.',
-    'ODDBBWWWWWWKKO',
-    '.ODBBWWWWWWDOO',
-    '..ODBWWWWWWDO.',
-    '..ODBSWWWWWDO.',
-    '..ODDSSWWWWDO.',
-    '..ODDSSWWWDO..',
-    '...ODSSSSDO...',
-    '..OKKO...OKKO.',
-    '..OOOO...OOOO.',
-    '..............',
-  ],
-  fall: [
-    '..OO......OO..',
-    '.ODDOOOOOODDO.',
-    '.ODDDDDDDDDDO.',
-    '..ODDBBBBHEO..',
-    '..ODGGGGEEEO..',
-    '..ODGAAWWWKKO.',
-    '..ODBWWWWWWKO.',
-    '..ODBWWWWWWDO.',
-    '..ODBWWWWWWDO.',
-    '..ODBSWWWWWDO.',
-    '..ODDSSWWWWDO.',
-    '...ODSSWWWDO..',
-    '...ODSSSSDO...',
-    '..OKKO...OKKO.',
-    '..OOOO...OOOO.',
-    '..............',
-  ],
-  landed: [
-    '..............',
-    '..............',
-    '..............',
-    '....OOOOOO....',
-    '...ODDDDDDO...',
-    '..ODDBBBBHEO..',
-    '..ODGGGGEEEO..',
-    '.OODGAAWWWKKO.',
-    'ODDBBWWWWWWKOO',
-    'ODDBBWWWWWWBDO',
-    'ODDDSSWWWWWDDO',
-    '.OOODSSSSSDOO.',
-    '..OKKOOOOOKKO.',
-    '..OOOO...OOOO.',
-    '..............',
-    '..............',
-  ],
-};
-
-export const BEAR_SPRITES = {
-  idle0: [
-    '.......................OOOO...OOO...',
-    '......................OWWWWO.OWFWO..',
-    '............OOOOOOOOOOOWFFFWOOWFWO..',
-    '........OOOOWWWWWWWWWWFFFFFFFFWWFO..',
-    '......OOWWWWWWWWWWWWWFFFFFFFFFFFFOO.',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEO.',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '..OFFFFFFFMMOOOOOOOOOOOOOOFFFFFO....',
-    '...OFFFFFOOO..OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFNNO...OSSSNNO....OFFFFNNO...',
-    '...OOOOOOOO...OOOOOOO....OOOOOOOO...',
-  ],
-  idle1: [
-    '....................................',
-    '.......................OOOO...OOO...',
-    '......................OWWWWO.OWFWO..',
-    '............OOOOOOOOOOOWFFFWOOWFWO..',
-    '........OOOOWWWWWWWWWWFFFFFFFFWWFO..',
-    '......OOWWWWWWWWWWWWWFFFFFFFFFFFFOO.',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEO.',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '..OFFFFFFFMMOOOOOOOOOOOOOOFFFFFO....',
-    '...OFFFFFOOO..OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFNNO...OSSSNNO....OFFFFNNO...',
-    '...OOOOOOOO...OOOOOOO....OOOOOOOO...',
-  ],
-  run0: [
-    '........................OOOO...OOO..',
-    '.......................OWWWWO.OWFWO.',
-    '............OOOOOOOOOOOOWFFFWOOWFWO.',
-    '........OOOOWWWWWWWWWWWFFFFFFFFWWFO.',
-    '......OOWWWWWWWWWWWWWWFFFFFFFFFFFFOO',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEOO',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFOOOOOOOOOOOOFFFFFMO...',
-    '..OFFFFFMMOOOO...OSSSSO...OFFFFFMO..',
-    '..OFFFFFOO........OSSSSO...OFFFFFMO.',
-    '.OFFFFFO...........OSSSSO...OFFFFFO.',
-    '.OFFFFNNO..........OSSSNNO...OFFFFFO',
-    '.OOOOOOOO..........OOOOOOO....OFFFFO',
-    '..............................OFFNNO',
-    '..............................OOOOOO',
-  ],
-  run1: [
-    '....................................',
-    '........................OOOO...OOO..',
-    '.......................OWWWWO.OWFWO.',
-    '............OOOOOOOOOOOOWFFFWOOWFWO.',
-    '........OOOOWWWWWWWWWWWFFFFFFFFWWFO.',
-    '......OOWWWWWWWWWWWWWWFFFFFFFFFFFFOO',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEOO',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '...OFFFFFFMMOOOOOOOOOOOOOOFFFFO.....',
-    '....OFFFFFOOO..OSSSSO...OFFFFO......',
-    '.....OFFFFFO...OSSSSO..OFFFFO.......',
-    '.....OFFFFNNO..OSSSNNO.OFFFFNNO.....',
-    '.....OOOOOOOO..OOOOOOO.OOOOOOOO.....',
-    '....................................',
-  ],
-  run2: [
-    '........................OOOO...OOO..',
-    '.......................OWWWWO.OWFWO.',
-    '............OOOOOOOOOOOOWFFFWOOWFWO.',
-    '........OOOOWWWWWWWWWWWFFFFFFFFWWFO.',
-    '......OOWWWWWWWWWWWWWWFFFFFFFFFFFFOO',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEOO',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '..OFFFFFFFMMOOOOOOOOOOOOOOFFFFFO....',
-    '..OSSSSOOFFFFFO........OSSSSOOFFFFO.',
-    '.OSSSSO..OFFFFFO......OSSSSO..OFFFFO',
-    '.OSSSNNO..OFFFFFO.....OSSSNNO.OFFFFO',
-    '.OOOOOOO..OFFFFNNO....OOOOOOO.OFFNNO',
-    '..........OOOOOOOO............OOOOOO',
-    '....................................',
-  ],
-  run3: [
-    '....................................',
-    '.......................OOOO...OOO...',
-    '......................OWWWWO.OWFWO..',
-    '............OOOOOOOOOOOWFFFWOOWFWO..',
-    '........OOOOWWWWWWWWWWFFFFFFFFWWFO..',
-    '......OOWWWWWWWWWWWWWFFFFFFFFFFFFOO.',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEO.',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFMMFFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '...OFFFFFMMOOOOOOOOOOOOOOOFFFFO.....',
-    '...OFFFFFO...OSSSSO.....OFFFFO......',
-    '...OFFFFO....OSSSSO.....OFFFFO......',
-    '...OFFNNO....OSSSNNO....OFFFFNNO....',
-    '...OOOOOO....OOOOOOO....OOOOOOOO....',
-    '....................................',
-  ],
-  chompOpen: [
-    '.......................OOOO...OOO...',
-    '......................OWWWWO.OWFWO..',
-    '............OOOOOOOOOOOWFFFWOOWFWO..',
-    '........OOOOWWWWWWWWWWFFFFFFFFWWFO..',
-    '......OOWWWWWWWWWWWWWFFFFFFFFFFFFOO.',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFHEO.',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFTTTTTO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFPPPPPO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFFPPPPPO',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFFFTTTTTO',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFFFFFO.',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMMOO..',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '..OFFFFFFFMMOOOOOOOOOOOOOOFFFFFO....',
-    '...OFFFFFOOO..OSSSSO.....OFFFFFO....',
-    '...OFFFFFO....OSSSSO......OFFFFO....',
-    '...OFFFFFO....OSSSSO......OFFFFO....',
-    '...OFFFFFO....OSSSSO......OFFFFO....',
-    '...OFFFFNNO...OSSSNNO.....OFFFFNNO..',
-    '...OOOOOOOO...OOOOOOO.....OOOOOOOO..',
-  ],
-  chompClosed: [
-    '....................................',
-    '.......................OOOO...OOO...',
-    '......................OWWWWO.OWFWO..',
-    '............OOOOOOOOOOOWFFFWOOWFWO..',
-    '........OOOOWWWWWWWWWWFFFFFFFFWWFO..',
-    '......OOWWWWWWWWWWWWWFFFFFFFFFFFFOO.',
-    '.....OWWWWFFFFFFFFFFFFFFFFFFFFFFNNO.',
-    '....OWWWFFFFFFFFFFFFFFFFFFFFFFFFNNOO',
-    '...OWWFFFFFFFFFFFFFFFFFFFFFFFFFFWWNO',
-    '..OOWFFFFFFFFFFFFFFFFFFFFFFFFFFFFNNO',
-    '.OOWFFFFFFFFFFFFFFFFFFFFFFFFFFPPPFOO',
-    '.OOFFFFFFFFFFFFFFFFFFFFFFFFFFMMMFO..',
-    '..OFFFFFFFFFFFFFFFFFFFFFFFFFMMMMO...',
-    '..OFFFFFFFFFFFMMMMMMMMMMMMMMFFMO....',
-    '..OFFFMMMMFFFFMMMMMMMMMMMMFFFFMO....',
-    '..OFFMMMMMFFFFMSSSSSSSSSSMFFFFMO....',
-    '..OFFFFFFFMMOOOOOOOOOOOOOOFFFFFO....',
-    '...OFFFFFOOO..OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFFO....OSSSSO.....OFFFFO.....',
-    '...OFFFFNNO...OSSSNNO....OFFFFNNO...',
-    '...OOOOOOOO...OOOOOOO....OOOOOOOO...',
-  ],
+  // Massive Polar Bear anatomy (70×44)
+  bRidgeHi: '#fffef7',
+  bMainCream: '#f5ebd8',
+  bTorchBounce: '#e6c89c',
+  bMidShadow: '#b8cae3',
+  bCoreShadow: '#8aa0c4',
+  bFarHi: '#8fa5c9',
+  bFarLo: '#6c82a8',
+  bInnerEar: '#382b47',
+  bNose: '#181224',
+  bMouth: '#7a1c2e',
+  bTongue: '#f26b8a',
+  bFang: '#ffffff',
 };
 
 /* ==========================================================================
-   Pixel Font (5×5) for Clean Speech Bubbles ("NOM!", "GRRR!", "!")
+   Pixel Font (5×5) for Crisp Speech Banners ("NOM!", "GRRR!", "!")
    ========================================================================== */
 
 const PIXEL_FONT = {
@@ -549,9 +262,9 @@ function getSlotX(index, total) {
 }
 
 function getTrapdoorWidth(total) {
-  if (total <= 1) return 18;
+  if (total <= 1) return 24;
   const step = (SLOT_R - SLOT_L) / (total - 1);
-  return clamp(Math.floor(step - 5), 12, 18);
+  return clamp(Math.floor(step - 5), 16, 24);
 }
 
 function prefersReducedMotion() {
@@ -573,19 +286,19 @@ function ensureArenaStyles() {
   width: 100%;
   border-radius: 1.125rem;
   overflow: hidden;
-  border: 2px solid #353e63;
-  background: #1b1e33;
-  box-shadow: 0 12px 28px rgba(15, 17, 32, 0.38);
+  border: 2px solid #2b436e;
+  background: #130d18;
+  box-shadow: 0 14px 32px rgba(10, 12, 24, 0.45);
 }
 .penguin-arena-canvas {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 320 / 144;
+  aspect-ratio: 320 / 180;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   user-select: none;
-  background: #1b1e33;
+  background: #0c1938;
 }
 .penguin-status-bar {
   display: flex;
@@ -593,30 +306,30 @@ function ensureArenaStyles() {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 0.75rem;
-  padding: 0.5rem 0.875rem;
-  background: #232136;
-  color: #faf6ed;
+  padding: 0.55rem 0.9rem;
+  background: #141020;
+  color: #fffdf5;
   font-size: 0.875rem;
   font-weight: 600;
-  border-top: 2px solid #353e63;
+  border-top: 2px solid #382115;
 }
 .penguin-status-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.2rem 0.65rem;
+  padding: 0.22rem 0.7rem;
   border-radius: 999px;
-  background: #353e63;
-  color: #faf6ed;
+  background: #234b91;
+  color: #fffdf5;
   font-variant-numeric: tabular-nums;
 }
 .penguin-status-pill[data-danger="true"] {
-  background: #9f1239;
-  color: #ffe4e6;
+  background: #b82914;
+  color: #fff799;
 }
 .penguin-status-note {
-  color: #dce6f5;
-  font-weight: 500;
+  color: #ffd042;
+  font-weight: 600;
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
@@ -625,12 +338,659 @@ function ensureArenaStyles() {
 }
 
 /* ==========================================================================
-   Clean Pixel Drawing Primitives (No Checkerboard / No Anti-Aliased Blur)
+   Offscreen Multi-Part Outlined Pixel Sprite Builder (Zero Checkerboard)
+   ========================================================================== */
+
+class PixelPartBuffer {
+  /**
+   * @param {number} width
+   * @param {number} height
+   */
+  constructor(width, height) {
+    this.w = width;
+    this.h = height;
+    this.grid = new Array(width * height).fill(null);
+  }
+
+  clear() {
+    this.grid.fill(null);
+  }
+
+  setPx(x, y, color) {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    if (ix < 0 || ix >= this.w || iy < 0 || iy >= this.h) return;
+    this.grid[iy * this.w + ix] = color;
+  }
+
+  getPx(x, y) {
+    if (x < 0 || x >= this.w || y < 0 || y >= this.h) return null;
+    return this.grid[y * this.w + x];
+  }
+
+  fillRect(x, y, w, h, color) {
+    const x0 = Math.round(x);
+    const y0 = Math.round(y);
+    const rw = Math.round(w);
+    const rh = Math.round(h);
+    for (let dy = 0; dy < rh; dy += 1) {
+      const py = y0 + dy;
+      if (py < 0 || py >= this.h) continue;
+      for (let dx = 0; dx < rw; dx += 1) {
+        const px = x0 + dx;
+        if (px < 0 || px >= this.w) continue;
+        this.grid[py * this.w + px] = color;
+      }
+    }
+  }
+
+  fillEllipse(cx, cy, rx, ry, color) {
+    const icx = Math.round(cx);
+    const icy = Math.round(cy);
+    const irx = Math.max(0.5, rx);
+    const iry = Math.max(0.5, ry);
+    const maxDy = Math.ceil(iry);
+    for (let dy = -maxDy; dy <= maxDy; dy += 1) {
+      const ny = dy / (iry + 0.35);
+      if (Math.abs(ny) > 1) continue;
+      const span = Math.floor(irx * Math.sqrt(Math.max(0, 1 - ny * ny)));
+      this.fillRect(icx - span, icy + dy, span * 2 + 1, 1, color);
+    }
+  }
+
+  fillCapsule(x0, y0, x1, y1, r0, r1, color) {
+    const dist = Math.max(1, Math.hypot(x1 - x0, y1 - y0));
+    const steps = Math.ceil(dist * 2);
+    for (let i = 0; i <= steps; i += 1) {
+      const t = i / steps;
+      const x = lerp(x0, x1, t);
+      const y = lerp(y0, y1, t);
+      const r = lerp(r0, r1, t);
+      this.fillEllipse(x, y, r, r, color);
+    }
+  }
+}
+
+/**
+ * Wraps an anatomical part plotted in `partBuf` with a crisp 1px dark outline
+ * (`outlineColor`, default `#141020`) and composites it onto `targetBuf`.
+ * Every overlapping body part gets its own unmistakable silhouette contour!
+ */
+function commitOutlinedPart(targetBuf, partBuf, outlineColor = PAL.outline) {
+  const { w, h, grid } = partBuf;
+  const tGrid = targetBuf.grid;
+
+  // Pass 1: 4-neighbour 1px dark outline around all non-empty pixels in partBuf
+  for (let y = 0; y < h; y += 1) {
+    const rowOff = y * w;
+    for (let x = 0; x < w; x += 1) {
+      if (grid[rowOff + x] !== null) continue;
+      const hasLeft = x > 0 && grid[rowOff + x - 1] !== null;
+      const hasRight = x < w - 1 && grid[rowOff + x + 1] !== null;
+      const hasUp = y > 0 && grid[rowOff - w + x] !== null;
+      const hasDown = y < h - 1 && grid[rowOff + w + x] !== null;
+      if (hasLeft || hasRight || hasUp || hasDown) {
+        tGrid[rowOff + x] = outlineColor;
+      }
+    }
+  }
+
+  // Also outline pixels on the outer edge of the buffer if touched
+  for (let y = 0; y < h; y += 1) {
+    const rowOff = y * w;
+    for (let x = 0; x < w; x += 1) {
+      const c = grid[rowOff + x];
+      if (c !== null) {
+        if (x === 0 || x === w - 1 || y === 0 || y === h - 1) {
+          tGrid[rowOff + x] = outlineColor;
+        } else {
+          tGrid[rowOff + x] = c;
+        }
+      }
+    }
+  }
+
+  partBuf.clear();
+}
+
+/**
+ * Draws a completed `PixelPartBuffer` onto the 2D canvas context anchored at bottom-center `(cx, bottomY)`.
+ */
+function drawPartBuffer(ctx, buf, cx, bottomY, flipX = false) {
+  const { w, h, grid } = buf;
+  const x0 = Math.round(cx - w / 2);
+  const y0 = Math.round(bottomY - h);
+
+  for (let y = 0; y < h; y += 1) {
+    const py = y0 + y;
+    if (py < 0 || py >= H) continue;
+    const rowOff = y * w;
+
+    let runColor = null;
+    let runStart = 0;
+    for (let c = 0; c <= w; c += 1) {
+      const srcX = flipX ? w - 1 - c : c;
+      const color = c < w ? grid[rowOff + srcX] : null;
+      if (color !== runColor) {
+        if (runColor !== null) {
+          ctx.fillStyle = runColor;
+          ctx.fillRect(x0 + runStart, py, c - runStart, 1);
+        }
+        runColor = color;
+        runStart = c;
+      }
+    }
+  }
+}
+
+/* ==========================================================================
+   1. LARGE Multi-Part Emperor Penguin Sprites (20 × 28 px each)
    ========================================================================== */
 
 /**
- * Fills an integer pixel rectangle on the 2D context.
+ * Builds a 20×28 multi-part outlined Emperor Penguin frame (facing RIGHT by default).
+ * @param {'idle0'|'idle1'|'blink'|'cheer'|'panic'|'fall'|'landed'} pose
  */
+function buildPenguinFrame(pose) {
+  const W_P = 20;
+  const H_P = 28;
+  const out = new PixelPartBuffer(W_P, H_P);
+  const part = new PixelPartBuffer(W_P, H_P);
+
+  const bob = pose === 'idle1' ? 1 : 0;
+  const squash = pose === 'landed' ? 2 : 0;
+
+  // --- PART 1: Far Webbed Orange Foot (4×3 with #141020 outline) ---
+  const footY = pose === 'fall' ? 24 : 25;
+  const farFootX = pose === 'panic' || pose === 'fall' ? 11 : 10;
+  part.fillRect(farFootX, footY, 4, 2, PAL.pBeakMid);
+  part.fillRect(farFootX + 1, footY, 3, 1, PAL.pBeakHi);
+  part.fillRect(farFootX, footY + 1, 4, 1, PAL.pBeakLo);
+  commitOutlinedPart(out, part);
+
+  // --- PART 2: Plump Teardrop Torso (16×20) with Royal-Navy Back, Golden Collar & Cream Belly ---
+  const bodyTop = 8 + bob + squash;
+  const bodyBot = 25;
+  for (let y = bodyTop; y <= bodyBot; y += 1) {
+    const t = (y - bodyTop) / Math.max(1, bodyBot - bodyTop);
+    // Plump teardrop contour widest at lower belly
+    const halfW = Math.round(4.6 + Math.sin(t * Math.PI * 0.88) * 3.1 + (squash ? 0.8 : 0));
+    const center = 9;
+    const xL = Math.max(2, center - halfW);
+    const xR = Math.min(16, center + halfW - 1);
+
+    for (let x = xL; x <= xR; x += 1) {
+      let col = PAL.pNavyLo;
+      // Glossy royal-navy back & highlight on left/dorsal side
+      if (x <= xL + 1) {
+        col = PAL.pNavyLo;
+      } else if (x <= xL + 3) {
+        col = y < bodyTop + 11 ? PAL.pNavyHi : PAL.pNavyMid;
+      } else if (x === xL + 4 && y < bodyTop + 14) {
+        col = PAL.pNavyMid;
+      } else {
+        // Golden-amber upper chest collar fading into rounded cream-white belly
+        if (y <= bodyTop + 2) {
+          col = x >= xR - 1 ? PAL.pGoldHi : PAL.pGoldMid;
+        } else if (y === bodyTop + 3) {
+          col = PAL.pGoldLo;
+        } else if (y >= bodyBot - 2 || x === xL + 4) {
+          col = PAL.pBellyLo;
+        } else if (y >= bodyBot - 5 || x === xL + 5) {
+          col = PAL.pBellyMid;
+        } else {
+          col = PAL.pBellyHi;
+        }
+      }
+      part.setPx(x, y, col);
+    }
+  }
+  // Cute tail tuft on lower left
+  part.fillRect(2, bodyBot - 2, 2, 2, PAL.pNavyLo);
+  commitOutlinedPart(out, part);
+
+  // --- PART 3: Near Webbed Orange Foot (4×3 with #141020 outline) ---
+  const nearFootX = pose === 'panic' || pose === 'fall' ? 4 : 6;
+  part.fillRect(nearFootX, footY, 4, 2, PAL.pBeakMid);
+  part.fillRect(nearFootX + 1, footY, 3, 1, PAL.pBeakHi);
+  part.fillRect(nearFootX, footY + 1, 4, 1, PAL.pBeakLo);
+  commitOutlinedPart(out, part);
+
+  // --- PART 4: Chunky 3-Tone Orange Beak (#ffb733, #f2741f, #b84314) ---
+  const headTop = 1 + bob + squash;
+  const beakY = headTop + 4;
+  if (pose === 'cheer' || pose === 'panic' || pose === 'fall') {
+    // Wide open beak!
+    part.fillRect(14, beakY - 1, 4, 2, PAL.pBeakMid);
+    part.fillRect(14, beakY - 1, 3, 1, PAL.pBeakHi);
+    part.fillRect(14, beakY + 1, 3, 1, PAL.bMouth);
+    part.fillRect(14, beakY + 2, 3, 1, PAL.pBeakLo);
+  } else {
+    // Closed chunky 3-tone beak
+    part.fillRect(14, beakY, 4, 3, PAL.pBeakMid);
+    part.fillRect(14, beakY, 3, 1, PAL.pBeakHi);
+    part.fillRect(14, beakY + 2, 3, 1, PAL.pBeakLo);
+  }
+  commitOutlinedPart(out, part);
+
+  // --- PART 5: Rounded Head (12×10) with Golden Cheek Patch & Expressive 2×3 Eye ---
+  for (let dy = 0; dy < 8; dy += 1) {
+    const y = headTop + dy;
+    const span = dy === 0 || dy === 7 ? 3 : dy === 1 || dy === 6 ? 4 : 5;
+    const cx = 9;
+    for (let x = cx - span; x <= cx + span; x += 1) {
+      let col = PAL.pNavyLo;
+      if (x <= cx - span + 1 && dy >= 1 && dy <= 5) {
+        col = PAL.pNavyHi; // glossy crown highlight
+      } else if (x <= cx - 1) {
+        col = PAL.pNavyMid;
+      } else if (dy >= 3 && dy <= 6 && x >= cx && x <= cx + 2) {
+        // Golden-amber ear & cheek patch
+        col = dy === 3 ? PAL.pGoldHi : dy === 4 ? PAL.pGoldMid : PAL.pGoldLo;
+      } else if (dy >= 2 && dy <= 5 && x >= cx + 2) {
+        col = PAL.pBellyHi; // white face cheek around eye
+      }
+      part.setPx(x, y, col);
+    }
+  }
+  commitOutlinedPart(out, part);
+
+  // Big expressive 2×3 dark eye + 1×1 bright white catchlight stamped on the head
+  const eyeX = 11;
+  const eyeY = headTop + 2;
+  if (pose === 'blink') {
+    out.fillRect(eyeX, eyeY + 1, 3, 1, PAL.outline);
+  } else {
+    out.fillRect(eyeX, eyeY, 2, 3, PAL.outline);
+    out.setPx(eyeX, eyeY, '#ffffff'); // 1×1 bright white catchlight
+    if (pose === 'panic' || pose === 'fall') {
+      out.setPx(eyeX + 1, eyeY + 2, '#ffffff'); // wide-eyed panic glint
+    }
+  }
+
+  // --- PART 6: Separately Outlined Wing/Flipper (5×13) Overlapping the Torso ---
+  if (pose === 'cheer') {
+    // Flipper raised high in celebration
+    for (let dy = 0; dy < 10; dy += 1) {
+      const y = headTop + 2 + dy;
+      const x0 = 3 + Math.floor(dy * 0.25);
+      part.fillRect(x0, y, 3, 1, PAL.pNavyMid);
+      part.setPx(x0, y, PAL.pNavyHi);
+      part.setPx(x0 + 2, y, PAL.pNavyLo);
+    }
+  } else if (pose === 'panic' || pose === 'fall') {
+    // Flipper flailing outward!
+    for (let dx = 0; dx < 8; dx += 1) {
+      const x = 1 + dx;
+      const y = bodyTop + 2 + Math.floor(dx * 0.35);
+      part.fillRect(x, y, 1, 3, PAL.pNavyMid);
+      part.setPx(x, y, PAL.pNavyHi);
+      part.setPx(x, y + 2, PAL.pNavyLo);
+    }
+  } else if (pose === 'landed') {
+    // Splayed flipper on the snow
+    for (let dx = 0; dx < 8; dx += 1) {
+      const x = 2 + dx;
+      const y = bodyTop + 6 + Math.floor(dx * 0.25);
+      part.fillRect(x, y, 1, 3, PAL.pNavyMid);
+      part.setPx(x, y, PAL.pNavyHi);
+    }
+  } else {
+    // Resting 5×13 shaded navy flipper with its own #141020 contour over the torso
+    const flipTop = bodyTop + 2;
+    for (let dy = 0; dy < 11; dy += 1) {
+      const y = flipTop + dy;
+      const w = dy === 0 || dy === 10 ? 2 : 3;
+      const x0 = 6 + (dy > 7 ? 1 : 0);
+      part.fillRect(x0, y, w, 1, PAL.pNavyMid);
+      part.setPx(x0, y, PAL.pNavyHi);
+      if (w >= 3) part.setPx(x0 + w - 1, y, PAL.pNavyLo);
+    }
+  }
+  commitOutlinedPart(out, part);
+
+  return out;
+}
+
+const PENGUIN_FRAME_CACHE = {
+  idle0: buildPenguinFrame('idle0'),
+  idle1: buildPenguinFrame('idle1'),
+  blink: buildPenguinFrame('blink'),
+  cheer: buildPenguinFrame('cheer'),
+  panic: buildPenguinFrame('panic'),
+  fall: buildPenguinFrame('fall'),
+  landed: buildPenguinFrame('landed'),
+};
+
+/* ==========================================================================
+   2. MASSIVE, Detailed Multi-Part Polar Bear Sprites (70 × 44 px)
+   ========================================================================== */
+
+/**
+ * Helper to draw a thick, muscular bear leg into `partBuf` with 4-5 solid cluster bands,
+ * shaggy elbow/heel fur tufts, broad paw, and 3 dark claws.
+ */
+function plotBearLeg(partBuf, hipX, hipY, kneeX, kneeY, pawX, pawY, isFar) {
+  const hiCol = isFar ? PAL.bFarHi : PAL.bRidgeHi;
+  const mainCol = isFar ? PAL.bFarHi : PAL.bMainCream;
+  const bounceCol = isFar ? PAL.bFarLo : PAL.bTorchBounce;
+  const midCol = isFar ? PAL.bFarLo : PAL.bMidShadow;
+  const coreCol = isFar ? PAL.bFarLo : PAL.bCoreShadow;
+
+  // Upper thigh / shoulder to knee
+  partBuf.fillCapsule(hipX, hipY, kneeX, kneeY, 5.2, 4.2, mainCol);
+  // Lower shin to ankle
+  partBuf.fillCapsule(kneeX, kneeY, pawX, pawY - 2, 4.0, 3.6, mainCol);
+  // Broad heavy paw pad
+  partBuf.fillRect(pawX - 4, pawY - 3, 10, 4, mainCol);
+
+  // Shaggy fur tufts at the back of the elbow/hock
+  const kIx = Math.round(kneeX);
+  const kIy = Math.round(kneeY);
+  partBuf.fillRect(kIx - 6, kIy - 1, 3, 2, midCol);
+  partBuf.fillRect(kIx - 7, kIy + 1, 3, 1, coreCol);
+
+  // Cluster-shaded color bands across the leg pixels
+  const minY = Math.max(1, Math.round(hipY - 6));
+  const maxY = Math.min(partBuf.h - 2, Math.round(pawY + 1));
+  for (let y = minY; y <= maxY; y += 1) {
+    let leftMost = partBuf.w;
+    let rightMost = -1;
+    for (let x = 0; x < partBuf.w; x += 1) {
+      if (partBuf.getPx(x, y) !== null) {
+        if (x < leftMost) leftMost = x;
+        if (x > rightMost) rightMost = x;
+      }
+    }
+    if (rightMost < leftMost) continue;
+    const span = Math.max(1, rightMost - leftMost + 1);
+    for (let x = leftMost; x <= rightMost; x += 1) {
+      if (partBuf.getPx(x, y) === null) continue;
+      const relX = (x - leftMost) / span;
+      if (relX > 0.72) {
+        partBuf.setPx(x, y, hiCol); // sunlit/moonlit leading edge
+      } else if (relX > 0.38) {
+        partBuf.setPx(x, y, y > pawY - 5 ? bounceCol : mainCol);
+      } else if (relX > 0.18) {
+        partBuf.setPx(x, y, midCol);
+      } else {
+        partBuf.setPx(x, y, coreCol);
+      }
+    }
+  }
+}
+
+/**
+ * Builds a 70×44 layered, multi-part outlined Polar Bear frame (facing RIGHT by default).
+ * Every leg, torso, ear, head, snout, and jaw has its own `#141020` dark outline!
+ *
+ * @param {'idle0'|'idle1'|'blink'|'run0'|'run1'|'run2'|'run3'|'run4'|'run5'|'chompOpen'|'chompClosed'} pose
+ */
+function buildBearFrame(pose) {
+  const W_B = 70;
+  const H_B = 44;
+  const out = new PixelPartBuffer(W_B, H_B);
+  const part = new PixelPartBuffer(W_B, H_B);
+
+  // Pose vertical offset & gait leg keyframes (6 gallop phases + idle/chomp)
+  let bodyBob = 0;
+  let headBob = 0;
+  let jawOpen = false;
+  let eyeClosed = false;
+
+  // Leg coordinates: [hipX, hipY, kneeX, kneeY, pawX, pawY]
+  let farHind = [21, 24, 20, 32, 21, 41];
+  let farFront = [44, 24, 44, 32, 46, 41];
+  let nearHind = [16, 24, 14, 32, 15, 42];
+  let nearFront = [39, 24, 39, 32, 40, 42];
+
+  if (pose === 'idle1') {
+    bodyBob = 1;
+    headBob = 1;
+  } else if (pose === 'blink') {
+    eyeClosed = true;
+  } else if (pose === 'chompOpen') {
+    jawOpen = true;
+    headBob = -1;
+    nearFront = [40, 24, 42, 32, 44, 42];
+  } else if (pose === 'chompClosed') {
+    eyeClosed = true;
+    bodyBob = 1;
+    headBob = 1;
+  } else if (pose === 'run0') {
+    // Powerful bound launch: front legs reaching forward, hind legs pushing back
+    bodyBob = -2;
+    headBob = -2;
+    farHind = [19, 23, 14, 31, 10, 39];
+    nearHind = [15, 23, 10, 32, 6, 41];
+    farFront = [45, 22, 51, 29, 57, 36];
+    nearFront = [41, 23, 47, 31, 53, 39];
+  } else if (pose === 'run1') {
+    // Airborne extended suspension phase
+    bodyBob = -3;
+    headBob = -2;
+    farHind = [18, 22, 12, 29, 7, 36];
+    nearHind = [15, 22, 9, 30, 5, 38];
+    farFront = [45, 21, 52, 28, 59, 34];
+    nearFront = [41, 22, 49, 29, 55, 37];
+  } else if (pose === 'run2') {
+    // Front paws planting
+    bodyBob = -1;
+    headBob = 0;
+    farHind = [19, 23, 16, 32, 14, 40];
+    nearHind = [15, 24, 12, 33, 10, 42];
+    farFront = [45, 23, 48, 32, 50, 41];
+    nearFront = [41, 24, 44, 33, 45, 42];
+  } else if (pose === 'run3') {
+    // Front legs pulling under, hind legs swinging forward
+    bodyBob = 1;
+    headBob = 1;
+    farHind = [20, 25, 23, 33, 26, 40];
+    nearHind = [16, 25, 19, 33, 22, 42];
+    farFront = [44, 25, 41, 33, 38, 41];
+    nearFront = [40, 25, 36, 34, 33, 42];
+  } else if (pose === 'run4') {
+    // Gathered coiled suspension under torso
+    bodyBob = 0;
+    headBob = 0;
+    farHind = [20, 24, 25, 32, 29, 39];
+    nearHind = [16, 24, 21, 32, 25, 41];
+    farFront = [44, 24, 39, 32, 34, 39];
+    nearFront = [40, 24, 35, 32, 31, 41];
+  } else if (pose === 'run5') {
+    // Hind legs planting and driving forward
+    bodyBob = -1;
+    headBob = -1;
+    farHind = [20, 24, 21, 33, 22, 41];
+    nearHind = [16, 24, 17, 33, 18, 42];
+    farFront = [44, 23, 47, 31, 51, 38];
+    nearFront = [40, 23, 43, 32, 47, 40];
+  }
+
+  // --- LAYER 1: Far Legs (Far Hind & Far Front, deep slate-blue with #141020 outline) ---
+  plotBearLeg(part, farHind[0], farHind[1] + bodyBob, farHind[2], farHind[3], farHind[4], farHind[5], true);
+  commitOutlinedPart(out, part);
+  // Far hind claws
+  out.setPx(farHind[4] + 4, farHind[5] - 1, PAL.outline);
+  out.setPx(farHind[4] + 6, farHind[5] - 1, PAL.outline);
+
+  plotBearLeg(part, farFront[0], farFront[1] + bodyBob, farFront[2], farFront[3], farFront[4], farFront[5], true);
+  commitOutlinedPart(out, part);
+  // Far front claws
+  out.setPx(farFront[4] + 4, farFront[5] - 1, PAL.outline);
+  out.setPx(farFront[4] + 6, farFront[5] - 1, PAL.outline);
+
+  // --- LAYER 2: Massive Sculpted Torso (48×26), Rump, Tail & Muscular Shoulder Hump ---
+  const tLeft = 8;
+  const tRight = 50;
+  for (let x = tLeft; x <= tRight; x += 1) {
+    const nx = (x - tLeft) / (tRight - tLeft); // 0..1 from rump to chest
+
+    // Sculpted top profile: rounded heavy rump (nx~0.2) + prominent shoulder hump (nx~0.72)
+    const rumpArch = Math.sin(clamp(nx / 0.55, 0, 1) * Math.PI) * 3.5;
+    const shoulderHump = Math.exp(-Math.pow((nx - 0.72) / 0.2, 2)) * 5.2;
+    const edgeRound = nx < 0.08 ? (0.08 - nx) * 45 : nx > 0.92 ? (nx - 0.92) * 35 : 0;
+    const topY = Math.round(13 + bodyBob - rumpArch - shoulderHump + edgeRound);
+
+    // Sculpted bottom profile: deep chest & shaggy belly with jagged fur tufts
+    const chestDepth = Math.sin(nx * Math.PI) * 4.5;
+    const shaggyTuft = (x % 4 === 0 && nx > 0.25 && nx < 0.85) ? 1 : 0;
+    const botY = Math.round(25 + bodyBob + chestDepth + shaggyTuft - edgeRound * 0.6);
+
+    // Shaggy top fur tufts along shoulder hump
+    const topTuft = (x % 3 === 0 && nx > 0.55 && nx < 0.82) ? 1 : 0;
+    const y0 = topY - topTuft;
+
+    for (let y = y0; y <= botY; y += 1) {
+      const span = Math.max(1, botY - y0);
+      const ny = (y - y0) / span;
+      let col = PAL.bMainCream;
+      if (ny < 0.17) {
+        col = PAL.bRidgeHi; // moonlit top ridge (#fffef7)
+      } else if (ny < 0.54) {
+        col = PAL.bMainCream; // warm cream main fur (#f5ebd8)
+      } else if (ny < 0.76) {
+        col = nx > 0.58 ? PAL.bTorchBounce : PAL.bMidShadow; // warm golden torch bounce on chest (#e6c89c)
+      } else if (ny < 0.9) {
+        col = nx > 0.45 && nx < 0.85 ? PAL.bTorchBounce : PAL.bMidShadow;
+      } else {
+        col = PAL.bCoreShadow; // slate core underbelly shadow (#8aa0c4)
+      }
+      part.setPx(x, y, col);
+    }
+  }
+  // Fluffy rounded bear tail tuft on the rump
+  part.fillEllipse(7, 16 + bodyBob, 3, 2.5, PAL.bMainCream);
+  part.fillRect(5, 14 + bodyBob, 3, 1, PAL.bRidgeHi);
+  commitOutlinedPart(out, part);
+
+  // Crisp interior contour lines + shaggy fur tufts at the haunch and shoulder hump
+  for (let dy = 0; dy < 6; dy += 1) {
+    out.setPx(23 + Math.floor(dy * 0.4), 16 + bodyBob + dy, PAL.outline);
+    out.setPx(36 - Math.floor(dy * 0.3), 13 + bodyBob + dy, PAL.outline);
+  }
+  out.setPx(28, 12 + bodyBob, PAL.outline);
+  out.setPx(33, 10 + bodyBob, PAL.outline);
+
+  // --- LAYER 3: Near Legs (Thick 14×20 Near Hind & 13×20 Near Front with Full #141020 Outlines) ---
+  plotBearLeg(part, nearHind[0], nearHind[1] + bodyBob, nearHind[2], nearHind[3], nearHind[4], nearHind[5], false);
+  commitOutlinedPart(out, part);
+  // 3 dark claws on near hind paw
+  out.setPx(nearHind[4] + 3, nearHind[5] - 1, PAL.outline);
+  out.setPx(nearHind[4] + 5, nearHind[5] - 1, PAL.outline);
+  out.setPx(nearHind[4] + 6, nearHind[5] - 2, PAL.outline);
+
+  plotBearLeg(part, nearFront[0], nearFront[1] + bodyBob, nearFront[2], nearFront[3], nearFront[4], nearFront[5], false);
+  commitOutlinedPart(out, part);
+  // 3 dark claws on near front paw
+  out.setPx(nearFront[4] + 3, nearFront[5] - 1, PAL.outline);
+  out.setPx(nearFront[4] + 5, nearFront[5] - 1, PAL.outline);
+  out.setPx(nearFront[4] + 6, nearFront[5] - 2, PAL.outline);
+
+  // --- LAYER 4: Neck, Ears, Sculpted Head (20×16), Muzzle & Articulated Lower Jaw ---
+  const hTop = 10 + headBob;
+
+  // 4a. Rounded Back Ear (outlined separately)
+  part.fillEllipse(51, hTop - 2, 3, 3, PAL.bMidShadow);
+  part.fillRect(50, hTop - 4, 3, 1, PAL.bMainCream);
+  commitOutlinedPart(out, part);
+
+  // 4b. Articulated Lower Jaw & Open Mouth (when chomping / roaring)
+  if (jawOpen) {
+    // Wide open lower jaw with dark red mouth (#7a1c2e), pink tongue (#f26b8a) & sharp white fangs!
+    part.fillRect(53, hTop + 10, 12, 6, PAL.bMouth);
+    part.fillRect(56, hTop + 12, 7, 2, PAL.bTongue);
+    part.fillRect(52, hTop + 14, 12, 2, PAL.bTorchBounce);
+    part.fillRect(51, hTop + 15, 11, 1, PAL.bCoreShadow);
+    commitOutlinedPart(out, part);
+
+    // Sharp white lower & upper canine fangs (#ffffff)
+    out.fillRect(62, hTop + 9, 2, 2, PAL.bFang);
+    out.fillRect(58, hTop + 9, 1, 2, PAL.bFang);
+    out.fillRect(62, hTop + 13, 2, 2, PAL.bFang);
+    out.fillRect(59, hTop + 13, 1, 2, PAL.bFang);
+  } else {
+    // Closed sturdy lower jaw & chin with warm torch bounce
+    part.fillRect(52, hTop + 10, 12, 3, PAL.bTorchBounce);
+    part.fillRect(51, hTop + 12, 11, 1, PAL.bCoreShadow);
+    commitOutlinedPart(out, part);
+  }
+
+  // 4c. Expressive Sculpted Head & Sloped Snout (20×16) with Shaggy Cheek Ruff
+  for (let x = 46; x <= 66; x += 1) {
+    const isSnout = x >= 58;
+    const topY = isSnout ? hTop + 3 + Math.floor((x - 58) * 0.28) : hTop + (x < 49 ? 49 - x : 0);
+    // Shaggy cheek ruff hanging down around x = 47..53
+    const ruffExtra = x >= 47 && x <= 53 ? 2 + (x % 2) : 0;
+    const botY = isSnout ? hTop + 9 : hTop + 11 + ruffExtra;
+
+    for (let y = topY; y <= botY; y += 1) {
+      const ny = (y - topY) / Math.max(1, botY - topY);
+      let col = PAL.bMainCream;
+      if (ny < 0.22) {
+        col = PAL.bRidgeHi;
+      } else if (ny < 0.65) {
+        col = PAL.bMainCream;
+      } else if (ny < 0.85) {
+        col = PAL.bTorchBounce;
+      } else {
+        col = PAL.bMidShadow;
+      }
+      part.setPx(x, y, col);
+    }
+  }
+  commitOutlinedPart(out, part);
+
+  // 4d. Furry Rounded Front Ear with Dark #382b47 Inner Ear (overlapping cranium!)
+  part.fillEllipse(48, hTop - 1, 3.5, 3.2, PAL.bMainCream);
+  part.fillRect(47, hTop - 3, 3, 1, PAL.bRidgeHi);
+  part.fillRect(48, hTop - 1, 2, 2, PAL.bInnerEar);
+  commitOutlinedPart(out, part);
+
+  // 4e. Large Shiny Dark Berry Nose (4×3 #181224 with 1×1 white highlight)
+  out.fillRect(64, hTop + 4, 4, 3, PAL.bNose);
+  out.setPx(65, hTop + 4, '#ffffff'); // 1×1 nose catchlight
+
+  // 4f. Big Expressive 3×3 Eye with 1×1 White Catchlight + Heavy Brow Ridge
+  const eyeX = 55;
+  const eyeY = hTop + 3;
+  // Heavy brow ridge above eye
+  out.fillRect(eyeX - 1, eyeY - 1, 4, 1, PAL.outline);
+  if (eyeClosed) {
+    out.fillRect(eyeX, eyeY + 1, 3, 1, PAL.outline);
+  } else {
+    out.fillRect(eyeX, eyeY, 3, 3, PAL.outline);
+    out.setPx(eyeX + 1, eyeY, '#ffffff'); // 1×1 bright white catchlight
+  }
+
+  // Interior cheek & muzzle contour pixel accents
+  out.setPx(50, hTop + 8, PAL.outline);
+  out.setPx(51, hTop + 9, PAL.outline);
+  if (!jawOpen) {
+    out.fillRect(59, hTop + 10, 6, 1, PAL.outline); // mouth line
+  }
+
+  return out;
+}
+
+const BEAR_FRAME_CACHE = {
+  idle0: buildBearFrame('idle0'),
+  idle1: buildBearFrame('idle1'),
+  blink: buildBearFrame('blink'),
+  run0: buildBearFrame('run0'),
+  run1: buildBearFrame('run1'),
+  run2: buildBearFrame('run2'),
+  run3: buildBearFrame('run3'),
+  run4: buildBearFrame('run4'),
+  run5: buildBearFrame('run5'),
+  chompOpen: buildBearFrame('chompOpen'),
+  chompClosed: buildBearFrame('chompClosed'),
+};
+
+/* ==========================================================================
+   Direct Canvas Integer Pixel Primitives
+   ========================================================================== */
+
 function fillRectPx(ctx, x, y, w, h, color) {
   const rx = Math.round(x);
   const ry = Math.round(y);
@@ -641,9 +1001,6 @@ function fillRectPx(ctx, x, y, w, h, color) {
   ctx.fillRect(rx, ry, rw, rh);
 }
 
-/**
- * Fills a solid pixel-art circle/ellipse using integer scanlines (smooth cluster, no dither).
- */
 function fillEllipsePx(ctx, cx, cy, rx, ry, color) {
   const icx = Math.round(cx);
   const icy = Math.round(cy);
@@ -660,38 +1017,33 @@ function fillEllipsePx(ctx, cx, cy, rx, ry, color) {
 }
 
 /**
- * Draws a hand-authored string-grid sprite anchored at bottom-center `(cx, bottomY)`.
+ * Draws an outlined stone/rock block with 3-4 cluster-shaded color bands and a 1px `#141020` border.
  */
-function drawStringSprite(ctx, grid, palette, cx, bottomY, flipX = false) {
-  const rows = grid.length;
-  const cols = grid[0].length;
-  const x0 = Math.round(cx - cols / 2);
-  const y0 = Math.round(bottomY - rows);
+function drawOutlinedBlock(ctx, x, y, w, h, hiCol, midCol, loCol, deepCol) {
+  const rx = Math.round(x);
+  const ry = Math.round(y);
+  const rw = Math.round(w);
+  const rh = Math.round(h);
+  if (rw < 3 || rh < 3) return;
 
-  for (let r = 0; r < rows; r += 1) {
-    const rowStr = grid[r];
-    const py = y0 + r;
-    if (py < 0 || py >= H) continue;
-
-    let runColor = null;
-    let runStart = 0;
-    for (let c = 0; c <= cols; c += 1) {
-      const ch = c < cols ? rowStr[flipX ? cols - 1 - c : c] : '.';
-      const color = ch === '.' ? null : palette[ch] || null;
-      if (color !== runColor) {
-        if (runColor !== null) {
-          ctx.fillStyle = runColor;
-          ctx.fillRect(x0 + runStart, py, c - runStart, 1);
-        }
-        runColor = color;
-        runStart = c;
-      }
-    }
+  // 1px dark outline (#141020)
+  fillRectPx(ctx, rx, ry, rw, rh, PAL.outline);
+  // Base mid fill
+  fillRectPx(ctx, rx + 1, ry + 1, rw - 2, rh - 2, midCol);
+  // Top highlight band
+  fillRectPx(ctx, rx + 1, ry + 1, rw - 2, Math.max(1, Math.floor((rh - 2) * 0.28)), hiCol);
+  // Left highlight edge
+  fillRectPx(ctx, rx + 1, ry + 1, 1, rh - 3, hiCol);
+  // Bottom shadow band
+  const botH = Math.max(1, Math.floor((rh - 2) * 0.32));
+  fillRectPx(ctx, rx + 1, ry + rh - 1 - botH, rw - 2, botH, loCol);
+  if (deepCol && rh >= 6) {
+    fillRectPx(ctx, rx + 2, ry + rh - 2, rw - 3, 1, deepCol);
   }
 }
 
 /**
- * Draws a cozy pixel speech bubble with a 1px dark plum outline and crisp 5×5 pixel font.
+ * Draws a bold pixel speech banner ("NOM!", "GRRR!", "!") with a 1px `#141020` outline.
  */
 function drawSpeechBubble(ctx, text, cx, cy, bgColor, borderColor, textColor) {
   let textW = 0;
@@ -701,28 +1053,25 @@ function drawSpeechBubble(ctx, text, cx, cy, bgColor, borderColor, textColor) {
   }
   textW = Math.max(1, textW - 1);
 
-  const padX = 4;
-  const padY = 3;
+  const padX = 5;
+  const padY = 4;
   const bw = textW + padX * 2;
   const bh = 5 + padY * 2;
   const x0 = clamp(Math.round(cx - bw / 2), 4, W - bw - 4);
   const y0 = clamp(Math.round(cy - bh), 4, H - bh - 6);
 
-  // Drop shadow
-  fillRectPx(ctx, x0 + 1, y0 + 2, bw, bh - 2, PAL.outlinePlum);
-  fillRectPx(ctx, x0 + 2, y0 + 1, bw - 2, bh, PAL.outlinePlum);
+  // Drop shadow & bold #141020 outline
+  fillRectPx(ctx, x0 + 1, y0 + 2, bw, bh, PAL.outline);
+  fillRectPx(ctx, x0 + 1, y0, bw - 2, bh, PAL.outline);
+  fillRectPx(ctx, x0, y0 + 1, bw, bh - 2, PAL.outline);
 
-  // Outer plum outline (rounded corners)
-  fillRectPx(ctx, x0 + 1, y0, bw - 2, bh, PAL.outlinePlum);
-  fillRectPx(ctx, x0, y0 + 1, bw, bh - 2, PAL.outlinePlum);
-
-  // Inner warm border & fill
+  // Golden border & cream interior
   fillRectPx(ctx, x0 + 1, y0 + 1, bw - 2, bh - 2, borderColor);
   fillRectPx(ctx, x0 + 2, y0 + 2, bw - 4, bh - 4, bgColor);
 
-  // Little speech pointer tail
+  // Speech pointer tail
   const tx = clamp(Math.round(cx), x0 + 4, x0 + bw - 5);
-  fillRectPx(ctx, tx - 1, y0 + bh, 3, 2, PAL.outlinePlum);
+  fillRectPx(ctx, tx - 1, y0 + bh, 3, 2, PAL.outline);
   fillRectPx(ctx, tx, y0 + bh - 1, 1, 2, bgColor);
 
   // Glyphs
@@ -748,26 +1097,59 @@ function drawSpeechBubble(ctx, text, cx, cy, bgColor, borderColor, textColor) {
 }
 
 /* ==========================================================================
-   Mountain Ridge Geometry (2-Layer Stylized Faceted Peaks)
+   Pre-Baked Static Environment Layers (Sky, Moon, Clouds, Mountains, Cave Walls)
    ========================================================================== */
 
+const CLOUD_GROUPS = [
+  {
+    cx: 56,
+    baseY: 46,
+    puffs: [
+      { dx: -22, dy: -2, r: 8 },
+      { dx: -11, dy: -7, r: 11 },
+      { dx: 3, dy: -10, r: 13 },
+      { dx: 16, dy: -6, r: 10 },
+      { dx: 26, dy: -2, r: 7 },
+    ],
+  },
+  {
+    cx: 158,
+    baseY: 42,
+    puffs: [
+      { dx: -26, dy: -2, r: 8 },
+      { dx: -14, dy: -8, r: 12 },
+      { dx: 0, dy: -12, r: 14 },
+      { dx: 15, dy: -8, r: 11 },
+      { dx: 27, dy: -3, r: 8 },
+    ],
+  },
+  {
+    cx: 244,
+    baseY: 48,
+    puffs: [
+      { dx: -18, dy: -2, r: 7 },
+      { dx: -7, dy: -7, r: 10 },
+      { dx: 6, dy: -9, r: 11 },
+      { dx: 18, dy: -4, r: 8 },
+    ],
+  },
+];
+
 const FAR_MOUNTAINS = [
-  { x0: -10, peakX: 34, peakY: 22, x1: 86 },
-  { x0: 56, peakX: 108, peakY: 16, x1: 164 },
-  { x0: 132, peakX: 184, peakY: 24, x1: 238 },
-  { x0: 204, peakX: 256, peakY: 15, x1: 312 },
-  { x0: 274, peakX: 314, peakY: 25, x1: 342 },
+  { x0: -12, peakX: 34, peakY: 32, x1: 88 },
+  { x0: 62, peakX: 118, peakY: 25, x1: 176 },
+  { x0: 148, peakX: 204, peakY: 29, x1: 262 },
+  { x0: 234, peakX: 288, peakY: 33, x1: 338 },
 ];
 
 const NEAR_MOUNTAINS = [
-  { x0: -8, peakX: 54, peakY: 27, x1: 118 },
-  { x0: 84, peakX: 146, peakY: 21, x1: 212 },
-  { x0: 176, peakX: 232, peakY: 26, x1: 292 },
-  { x0: 254, peakX: 298, peakY: 29, x1: 336 },
+  { x0: -6, peakX: 64, peakY: 36, x1: 134 },
+  { x0: 98, peakX: 162, peakY: 28, x1: 228 },
+  { x0: 192, peakX: 252, peakY: 35, x1: 318 },
 ];
 
 /* ==========================================================================
-   PenguinArena — 320 × 144 Cluster-Shaded Pixel-Art Controller
+   PenguinArena — 320 × 180 High-Detail Storybook Pixel-Art Controller
    ========================================================================== */
 
 export class PenguinArena {
@@ -794,7 +1176,6 @@ export class PenguinArena {
     this._stars = this._createStars();
     this._flakes = this._createSnowflakes();
     this._icicles = this._createIcicles();
-    this._caveStalactites = this._createCaveStalactites();
     this._bear = this._createInitialBear();
     this._shakeTimer = 0;
 
@@ -802,6 +1183,10 @@ export class PenguinArena {
     this._ctx = null;
     this._statusPill = null;
     this._statusNote = null;
+
+    // Pre-build outlined cloud & moon buffers for ultra-crisp rendering
+    this._moonBuf = this._buildMoonBuffer();
+    this._cloudBuf = this._buildCloudsBuffer();
 
     ensureArenaStyles();
     this._buildDom();
@@ -819,9 +1204,9 @@ export class PenguinArena {
       targetIndex: null,
       targetX: null,
       runTime: 0,
-      blinkCooldown: 2.4,
+      blinkCooldown: 2.3,
       blinkTimer: 0,
-      breathTimer: 1.5,
+      breathTimer: 1.4,
       dustTimer: 0,
       pawprintCooldown: 0,
       pawSide: 0,
@@ -831,7 +1216,7 @@ export class PenguinArena {
   }
 
   /**
-   * Resets all penguins onto the bridge, closes trapdoors, and places the bear at home on the left.
+   * Resets all penguins onto the bridge, closes trapdoors, and places the bear at home (`x = 64`).
    * @param {number} [totalPenguins]
    */
   reset(totalPenguins = this._state ? this._state.total : 10) {
@@ -839,9 +1224,9 @@ export class PenguinArena {
     this._state = createPenguinState(totalPenguins);
     this._particles = [];
     this._pawprints = [
-      { x: 42, y: FLOOR_Y + 3, life: 999 },
-      { x: 52, y: FLOOR_Y + 5, life: 999 },
-      { x: 61, y: FLOOR_Y + 3, life: 999 },
+      { x: 38, y: FLOOR_Y + 4, life: 999 },
+      { x: 50, y: FLOOR_Y + 7, life: 999 },
+      { x: 60, y: FLOOR_Y + 4, life: 999 },
     ];
     this._shakeTimer = 0;
 
@@ -884,10 +1269,10 @@ export class PenguinArena {
    * Wrong answer choreography:
    * 1. Trapdoor swings open
    * 2. Penguin panics briefly (220ms)
-   * 3. Penguin falls straight down with gravity and lands on the snow floor (`landed` sprite + snow puff)
-   * 4. ONLY AFTER landing, the polar bear gallops over (`run0..run3`) to the fallen penguin
-   * 5. Bear chomps (`chompOpen` → `chompClosed` + snow/feather burst + `"NOM!"` bubble)
-   * 6. Bear stands still waiting right where it is, facing remaining penguins
+   * 3. Penguin falls with gravity and lands on the snow floor (`landed` pose)
+   * 4. ONLY AFTER landing, the polar bear bounds across the cave in a 6-phase gallop to the fallen penguin
+   * 5. Bear chomps (`chompOpen` → `chompClosed` + camera shake + snow/feather burst + `"NOM!"` pixel banner)
+   * 6. Bear stands still waiting right where it is, facing the remaining penguins
    */
   onWrongAnswer() {
     const prevRemaining = this._state.remaining;
@@ -915,7 +1300,7 @@ export class PenguinArena {
       }
       const bear = this._bear;
       bear.dir = targetX >= bear.x ? 1 : -1;
-      bear.x = clamp(targetX - bear.dir * 18, 28, W - 28);
+      bear.x = clamp(targetX - bear.dir * 26, 40, W - 40);
       bear.mode = 'chompClosed';
       bear.modeTimer = 0.5;
       this._setBubble('NOM!', 1.0);
@@ -934,12 +1319,12 @@ export class PenguinArena {
 
     if (door) {
       door.targetAngle = 88;
-      this._spawnSnowBurst(targetX, BRIDGE_Y + 3, 6);
+      this._spawnSnowBurst(targetX, BRIDGE_Y + 3, 7);
     }
 
     if (penguin) {
       penguin.status = 'panic';
-      penguin.timer = 0.22; // 220ms brief panic before falling
+      penguin.timer = 0.22; // 220ms panic before falling
       penguin.vy = 0;
       penguin.y = BRIDGE_Y;
     }
@@ -968,8 +1353,8 @@ export class PenguinArena {
       if (!reduced) {
         p.status = 'cheer';
         p.cheerDelay = i * 0.035;
-        p.timer = 0.72;
-        this._spawnSparkles(p.x, BRIDGE_Y - 17);
+        p.timer = 0.75;
+        this._spawnSparkles(p.x, BRIDGE_Y - 26);
       }
     }
 
@@ -1063,17 +1448,18 @@ export class PenguinArena {
   /** @private */
   _createStars() {
     const stars = [];
-    for (let i = 0; i < 34; i += 1) {
-      const x = 10 + Math.floor(seededRand(i * 3 + 1) * (W - 20));
-      const y = 3 + Math.floor(seededRand(i * 3 + 2) * 32);
-      // Keep stars clear of the crescent moon around (266, 15)
-      if (Math.hypot(x - 266, y - 15) < 16) continue;
+    for (let i = 0; i < 38; i += 1) {
+      const x = 8 + Math.floor(seededRand(i * 3 + 1) * (W - 16));
+      const y = 3 + Math.floor(seededRand(i * 3 + 2) * 34);
+      // Keep stars clear of the big golden crescent moon at (272, 22)
+      if (Math.hypot(x - 272, y - 22) < 20) continue;
       stars.push({
         x,
         y,
-        cross: i % 6 === 0,
+        diamond: i % 4 === 0,
+        bigDiamond: i % 11 === 0,
         phase: seededRand(i * 5 + 3) * Math.PI * 2,
-        speed: 1.2 + seededRand(i * 7 + 4) * 1.8,
+        speed: 1.4 + seededRand(i * 7 + 4) * 1.8,
       });
     }
     return stars;
@@ -1082,8 +1468,8 @@ export class PenguinArena {
   /** @private */
   _createSnowflakes() {
     const flakes = [];
-    for (let i = 0; i < 36; i += 1) {
-      const front = i >= 24;
+    for (let i = 0; i < 34; i += 1) {
+      const front = i >= 22;
       flakes.push({
         x: seededRand(i * 7 + 1) * W,
         y: seededRand(i * 7 + 2) * H,
@@ -1099,22 +1485,79 @@ export class PenguinArena {
   /** @private */
   _createIcicles() {
     const list = [];
-    for (let x = 34; x <= 286; x += 9) {
-      const len = 3 + Math.floor(seededRand(x * 13) * 5);
+    for (let x = 22; x <= 298; x += 8) {
+      const len = 4 + Math.floor(seededRand(x * 13) * 6);
       list.push({ x, len });
     }
     return list;
   }
 
   /** @private */
-  _createCaveStalactites() {
-    const list = [];
-    for (let x = 18; x <= 302; x += 16) {
-      const len = 5 + Math.floor(seededRand(x * 19 + 3) * 8);
-      const w = 3 + Math.floor(seededRand(x * 7 + 2) * 3);
-      list.push({ x, len, w });
+  _buildMoonBuffer() {
+    // Big golden crescent moon (r = 13) at (272, 22) with dark #141020 outline
+    const buf = new PixelPartBuffer(34, 34);
+    const part = new PixelPartBuffer(34, 34);
+    const cx = 17;
+    const cy = 17;
+    const r = 13;
+    for (let dy = -r; dy <= r; dy += 1) {
+      for (let dx = -r; dx <= r; dx += 1) {
+        const dMain = Math.hypot(dx, dy);
+        // Carve inner crescent cutout shifted top-right
+        const dCut = Math.hypot(dx - 6, dy + 3);
+        if (dMain <= r && dCut > 10.2) {
+          let col = PAL.moonMid;
+          if (dx + dy < -4) {
+            col = PAL.moonHi;
+          } else if (dCut < 11.6 || dx + dy > 6) {
+            col = PAL.moonLo;
+          }
+          if (dx + dy > 10) {
+            col = PAL.moonDeep;
+          }
+          part.setPx(cx + dx, cy + dy, col);
+        }
+      }
     }
-    return list;
+    commitOutlinedPart(buf, part, PAL.outline);
+    return buf;
+  }
+
+  /** @private */
+  _buildCloudsBuffer() {
+    // Fluffy, billowy multi-tone pixel clouds (#f5f9ff, #bfd8f8, #7ba3d9, #466da6) with #152852 outline
+    const buf = new PixelPartBuffer(W, 64);
+    const part = new PixelPartBuffer(W, 64);
+
+    for (const cg of CLOUD_GROUPS) {
+      for (const pf of cg.puffs) {
+        const px = cg.cx + pf.dx;
+        const py = cg.baseY + pf.dy;
+        part.fillEllipse(px, py, pf.r, pf.r * 0.88, PAL.cloudMid);
+      }
+      // Flat billowy cloud base
+      part.fillRect(cg.cx - 24, cg.baseY - 4, 48, 6, PAL.cloudLo);
+
+      // Multi-tone billowy cluster shading inside each puff
+      for (const pf of cg.puffs) {
+        const px = cg.cx + pf.dx;
+        const py = cg.baseY + pf.dy;
+        part.fillEllipse(px - 1, py - 2, pf.r * 0.78, pf.r * 0.62, PAL.cloudHi);
+        part.fillEllipse(px + 1, py + 2, pf.r * 0.72, pf.r * 0.45, PAL.cloudLo);
+      }
+
+      // Deep periwinkle under-shadow along the cloud bottom
+      for (let x = cg.cx - 28; x <= cg.cx + 28; x += 1) {
+        for (let y = cg.baseY - 1; y <= cg.baseY + 3; y += 1) {
+          if (part.getPx(x, y) !== null) {
+            part.setPx(x, y, y >= cg.baseY + 1 ? PAL.cloudDeep : PAL.cloudLo);
+          }
+        }
+      }
+    }
+
+    commitOutlinedPart(buf, part, PAL.outlineSky);
+    return buf;
   }
 
   /** @private */
@@ -1180,7 +1623,7 @@ export class PenguinArena {
 
   /** @private */
   _addParticle(p) {
-    if (this._particles.length < 180) {
+    if (this._particles.length < 220) {
       this._particles.push(p);
     }
   }
@@ -1192,34 +1635,34 @@ export class PenguinArena {
       const r = Math.random();
       this._addParticle({
         kind: 'snow',
-        x: x + (Math.random() - 0.5) * 8,
+        x: x + (Math.random() - 0.5) * 10,
         y: y - 1,
-        vx: side * (14 + r * 38),
-        vy: -18 - r * 34,
-        g: 120,
-        size: r < 0.45 ? 2 : 1,
-        life: 0.38 + r * 0.25,
-        max: 0.65,
+        vx: side * (16 + r * 44),
+        vy: -20 - r * 38,
+        g: 135,
+        size: r < 0.5 ? 2 : 1,
+        life: 0.4 + r * 0.28,
+        max: 0.68,
         color: i % 3 === 0 ? PAL.snowMid : PAL.snowHi,
-        floor: FLOOR_Y + 2,
+        floor: FLOOR_Y + 3,
       });
     }
   }
 
   /** @private */
   _spawnLandingPuff(x, y) {
-    this._spawnSnowBurst(x, y, 12);
+    this._spawnSnowBurst(x, y, 14);
     for (let i = -1; i <= 1; i += 1) {
       this._addParticle({
         kind: 'puff',
-        x: x + i * 4,
+        x: x + i * 5,
         y: y - 2,
-        vx: i * 12,
-        vy: -5,
+        vx: i * 14,
+        vy: -6,
         g: 0,
-        r: 2,
-        life: 0.4,
-        max: 0.4,
+        r: 3,
+        life: 0.42,
+        max: 0.42,
         color: PAL.snowHi,
       });
     }
@@ -1227,26 +1670,21 @@ export class PenguinArena {
 
   /** @private */
   _spawnChompBurst(x, y) {
-    this._spawnSnowBurst(x, y, 14);
-    const featherColors = [
-      PENGUIN_PALETTE.D,
-      PENGUIN_PALETTE.W,
-      PENGUIN_PALETTE.G,
-      PENGUIN_PALETTE.B,
-    ];
-    for (let i = 0; i < 10; i += 1) {
+    this._spawnSnowBurst(x, y, 16);
+    const featherColors = [PAL.pNavyLo, PAL.pBellyHi, PAL.pGoldHi, PAL.pNavyHi, PAL.pBeakHi];
+    for (let i = 0; i < 12; i += 1) {
       const ang = -Math.PI * 0.15 - Math.random() * Math.PI * 0.7;
-      const sp = 22 + Math.random() * 42;
+      const sp = 26 + Math.random() * 48;
       this._addParticle({
         kind: 'feather',
-        x: x + (Math.random() - 0.5) * 8,
-        y: y - 5,
+        x: x + (Math.random() - 0.5) * 10,
+        y: y - 7,
         vx: Math.cos(ang) * sp,
-        vy: Math.sin(ang) * sp - 12,
-        g: 28,
+        vy: Math.sin(ang) * sp - 14,
+        g: 32,
         sway: Math.random() * Math.PI * 2,
-        life: 0.85 + Math.random() * 0.4,
-        max: 1.25,
+        life: 0.9 + Math.random() * 0.45,
+        max: 1.35,
         color: featherColors[i % featherColors.length],
       });
     }
@@ -1254,17 +1692,17 @@ export class PenguinArena {
 
   /** @private */
   _spawnSparkles(x, y) {
-    const colors = [PAL.moonGold, PAL.moonCream, PAL.crystalMid];
-    for (let i = 0; i < 4; i += 1) {
+    const colors = [PAL.moonHi, PAL.moonMid, PAL.crystalHi];
+    for (let i = 0; i < 5; i += 1) {
       this._addParticle({
         kind: 'spark',
-        x: x + (Math.random() - 0.5) * 10,
-        y: y + (Math.random() - 0.5) * 5,
-        vx: (Math.random() - 0.5) * 14,
-        vy: -12 - Math.random() * 16,
-        g: 10,
-        life: 0.5 + Math.random() * 0.25,
-        max: 0.75,
+        x: x + (Math.random() - 0.5) * 12,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: (Math.random() - 0.5) * 16,
+        vy: -14 - Math.random() * 18,
+        g: 12,
+        life: 0.52 + Math.random() * 0.25,
+        max: 0.77,
         color: colors[i % colors.length],
       });
     }
@@ -1273,20 +1711,20 @@ export class PenguinArena {
   /** @private */
   _spawnBreath(heavy = false) {
     const b = this._bear;
-    const snoutX = b.x + b.dir * 17;
-    const snoutY = FLOOR_Y - 14;
-    const count = heavy ? 3 : 2;
+    const snoutX = b.x + b.dir * 31;
+    const snoutY = FLOOR_Y - 24;
+    const count = heavy ? 4 : 2;
     for (let i = 0; i < count; i += 1) {
       this._addParticle({
         kind: 'puff',
         x: snoutX + b.dir * (i * 2),
         y: snoutY - i,
-        vx: b.dir * (heavy ? 14 + i * 5 : 6 + i * 3),
+        vx: b.dir * (heavy ? 16 + i * 5 : 7 + i * 3),
         vy: -5 - i * 2,
         g: 0,
-        r: heavy ? 2 : 1,
-        life: 0.75,
-        max: 0.75,
+        r: heavy ? 3 : 2,
+        life: 0.78,
+        max: 0.78,
         color: PAL.snowMid,
       });
     }
@@ -1335,6 +1773,22 @@ export class PenguinArena {
       if (f.x > W + 2) f.x = -2;
     }
 
+    // Rising ember sparks from the 2 cavern wall torches
+    if (Math.random() < dt * 9) {
+      const torch = WALL_TORCHES[Math.random() < 0.5 ? 0 : 1];
+      this._addParticle({
+        kind: 'ember',
+        x: torch.x + (Math.random() - 0.5) * 4,
+        y: torch.y - 8,
+        vx: (Math.random() - 0.5) * 10,
+        vy: -14 - Math.random() * 14,
+        g: -4,
+        life: 0.55 + Math.random() * 0.35,
+        max: 0.9,
+        color: Math.random() < 0.5 ? PAL.fireCore : PAL.fireGold,
+      });
+    }
+
     // Hinged wooden trapdoors
     for (let i = 0; i < this._trapdoors.length; i += 1) {
       const door = this._trapdoors[i];
@@ -1381,7 +1835,7 @@ export class PenguinArena {
         if (p.timer <= 0) {
           p.status = 'falling';
           p.timer = 0;
-          p.vy = 18;
+          p.vy = 20;
         }
       } else if (p.status === 'falling') {
         p.vy += GRAVITY * dt;
@@ -1392,7 +1846,7 @@ export class PenguinArena {
           p.status = 'landed';
           p.landedTimer = 0;
           this._spawnLandingPuff(p.x, FLOOR_Y);
-          this._shakeTimer = Math.max(this._shakeTimer, 0.08);
+          this._shakeTimer = Math.max(this._shakeTimer, 0.09);
         }
       } else if (p.status === 'landed') {
         p.landedTimer += dt;
@@ -1414,7 +1868,7 @@ export class PenguinArena {
       pt.x += pt.vx * dt;
       pt.y += pt.vy * dt;
       if (pt.kind === 'feather') {
-        pt.x += Math.sin(t * 5 + pt.sway) * 10 * dt;
+        pt.x += Math.sin(t * 5 + pt.sway) * 11 * dt;
         pt.vx *= 0.96;
       }
       if (pt.floor && pt.y > pt.floor) {
@@ -1467,7 +1921,7 @@ export class PenguinArena {
       bear.breathTimer -= dt;
       if (bear.breathTimer <= 0) {
         this._spawnBreath(false);
-        bear.breathTimer = bear.mode === 'watch' ? 1.2 : 2.3;
+        bear.breathTimer = bear.mode === 'watch' ? 1.15 : 2.2;
       }
     }
 
@@ -1510,7 +1964,7 @@ export class PenguinArena {
         bear.mode = 'wait';
         return;
       }
-      const stopDist = 17;
+      const stopDist = 26;
       const dx = target.x - bear.x;
       const dist = Math.abs(dx);
       bear.dir = dx >= 0 ? 1 : -1;
@@ -1518,19 +1972,19 @@ export class PenguinArena {
 
       bear.dustTimer -= dt;
       if (bear.dustTimer <= 0) {
-        this._spawnSnowBurst(bear.x - bear.dir * 11, FLOOR_Y, 3);
-        bear.dustTimer = 0.09;
+        this._spawnSnowBurst(bear.x - bear.dir * 18, FLOOR_Y, 4);
+        bear.dustTimer = 0.085;
       }
 
       bear.pawprintCooldown -= dt;
       if (bear.pawprintCooldown <= 0) {
         bear.pawSide = 1 - bear.pawSide;
         this._pawprints.push({
-          x: Math.round(bear.x - bear.dir * 8),
-          y: FLOOR_Y + 2 + bear.pawSide * 2,
+          x: Math.round(bear.x - bear.dir * 12),
+          y: FLOOR_Y + 3 + bear.pawSide * 3,
           life: 10,
         });
-        if (this._pawprints.length > 26) {
+        if (this._pawprints.length > 28) {
           this._pawprints.shift();
         }
         bear.pawprintCooldown = 0.11;
@@ -1538,25 +1992,25 @@ export class PenguinArena {
 
       if (dist <= stopDist) {
         bear.mode = 'chompOpen';
-        bear.modeTimer = 0.16;
+        bear.modeTimer = 0.18;
         bear.targetIndex = target.index;
       } else {
-        const step = Math.min(dist - stopDist + 1, 165 * dt);
-        bear.x = clamp(bear.x + bear.dir * step, 24, W - 24);
+        const step = Math.min(dist - stopDist + 1, 185 * dt);
+        bear.x = clamp(bear.x + bear.dir * step, 36, W - 36);
       }
     } else if (bear.mode === 'chompOpen') {
       bear.modeTimer -= dt;
       if (bear.modeTimer <= 0) {
         const target = bear.targetIndex !== null ? this._penguins[bear.targetIndex] : null;
-        const burstX = target ? target.x : bear.x + bear.dir * 17;
+        const burstX = target ? target.x : bear.x + bear.dir * 26;
         if (target && target.status !== 'eaten') {
           target.status = 'eaten';
         }
         bear.mode = 'chompClosed';
-        bear.modeTimer = 0.52;
+        bear.modeTimer = 0.54;
         this._setBubble('NOM!', 1.15);
-        this._shakeTimer = 0.18;
-        this._spawnChompBurst(burstX, FLOOR_Y - 5);
+        this._shakeTimer = 0.2;
+        this._spawnChompBurst(burstX, FLOOR_Y - 8);
       }
     } else if (bear.mode === 'chompClosed') {
       bear.modeTimer -= dt;
@@ -1596,11 +2050,11 @@ export class PenguinArena {
     bear.bubbleText = null;
     bear.dustTimer = 0;
     bear.pawprintCooldown = 0;
-    this._spawnSnowBurst(bear.x - bear.dir * 10, FLOOR_Y, 5);
+    this._spawnSnowBurst(bear.x - bear.dir * 16, FLOOR_Y, 6);
   }
 
   /* ------------------------------------------------------------------------
-     Rendering Pipeline (320 × 144 Cluster-Shaded Scene)
+     Rendering Pipeline (320 × 180 High-Detail Storybook Scene)
      ------------------------------------------------------------------------ */
 
   /** @private */
@@ -1614,8 +2068,8 @@ export class PenguinArena {
     let shakeX = 0;
     let shakeY = 0;
     if (this._shakeTimer > 0) {
-      shakeX = Math.round((Math.random() * 2 - 1) * 1.5);
-      shakeY = Math.round((Math.random() * 2 - 1) * 1.5);
+      shakeX = Math.round((Math.random() * 2 - 1) * 2);
+      shakeY = Math.round((Math.random() * 2 - 1) * 2);
     }
 
     ctx.save();
@@ -1623,127 +2077,90 @@ export class PenguinArena {
       ctx.translate(shakeX, shakeY);
     }
 
-    // 1. Twilight sky bands + softly curved horizon steps
-    this._drawTwilightSky(ctx);
+    // 1. Vibrant Royal-Blue Night Sky (y = 0..74) + golden 4-point diamond stars + big crescent moon
+    this._drawRoyalNightSky(ctx, t);
 
-    // 2. Smooth curved Aurora ribbons (2-tone mint & lavender)
-    this._drawAuroraRibbons(ctx, t);
+    // 2. Fluffy, billowy multi-tone pixel clouds rolling across the sky
+    drawPartBuffer(ctx, this._cloudBuf, W / 2, 64, false);
 
-    // 3. Clean crescent moon & crisp 1px / 3×3 cross stars
-    this._drawMoonAndStars(ctx, t);
-
-    // 4. Stylized 2-layer snow-capped mountains with crisp ridge shading
+    // 3. Chunky outlined snow-capped mountains in front of the clouds
     this._drawMountains(ctx);
 
-    // 5. Background snowflakes
+    // 4. Background snowflakes
     this._drawSnowflakes(ctx, false);
 
-    // 6. Cozy Ice Cave (ISHULEN, y = 65..144)
-    this._drawIceCave(ctx, t);
+    // 5. Warm Torchlit Rocky Ice Cavern (y = 86..180) with torches, cyan crystals & snow floor
+    this._drawTorchlitCavern(ctx, t);
 
-    // 7. Cozy Timber & Ice Bridge (y = 56..65) + trapdoors + hanging lanterns
+    // 6. Sturdy Timber & Ice Bridge (y = 74..86) + trapdoors + hanging lanterns
     this._drawTimberIceBridge(ctx, t);
 
-    // 8. Emperor Penguins (14×16 hand-crafted sprites)
+    // 7. Large Outlined Emperor Penguins (20×28 each)
     this._drawPenguins(ctx, t);
 
-    // 9. Polar Bear (36×22 hand-crafted sprites)
+    // 8. Massive Layered Outlined Polar Bear (70×44)
     this._drawPolarBear(ctx, t);
 
-    // 10. Particles & foreground snowflakes
+    // 9. Particles & foreground snowflakes
     this._drawParticles(ctx);
     this._drawSnowflakes(ctx, true);
 
-    // 11. Speech bubbles ("NOM!", "GRRR!")
+    // 10. Pixel speech banners ("NOM!", "GRRR!")
     this._drawBearSpeechBubble(ctx);
 
     ctx.restore();
   }
 
   /** @private */
-  _drawTwilightSky(ctx) {
-    // Clean horizontal bands with softly curved horizon steps (NO checkerboard!)
-    fillRectPx(ctx, 0, 0, W, 14, PAL.sky0);
-    fillRectPx(ctx, 0, 14, W, 13, PAL.sky1);
-    fillRectPx(ctx, 0, 27, W, 13, PAL.sky2);
-    fillRectPx(ctx, 0, 40, W, 18, PAL.sky3);
+  _drawRoyalNightSky(ctx, t) {
+    // Deep royal-blue night sky gradient bands (#0c1938 -> #162f63 -> #234b91 -> #3870ba)
+    fillRectPx(ctx, 0, 0, W, 17, PAL.sky0);
+    fillRectPx(ctx, 0, 17, W, 17, PAL.sky1);
+    fillRectPx(ctx, 0, 34, W, 18, PAL.sky2);
+    fillRectPx(ctx, 0, 52, W, 24, PAL.sky3);
 
-    // Soft curved horizon steps at band transitions
-    for (let x = 0; x < W; x += 8) {
-      const curve = Math.round(Math.sin(x * 0.022) * 2);
-      fillRectPx(ctx, x, 13 + curve, 8, 2, PAL.sky1);
-      fillRectPx(ctx, x, 26 + curve, 8, 2, PAL.sky2);
-      fillRectPx(ctx, x, 39 + curve, 8, 2, PAL.sky3);
-    }
-  }
-
-  /** @private */
-  _drawAuroraRibbons(ctx, t) {
-    // Ribbon 1: Warm lavender wave in upper sky (clean solid pixel bands)
-    for (let x = 18; x < 244; x += 2) {
-      const env = Math.sin(((x - 18) / 226) * Math.PI);
-      const thickness = Math.round(env * 5);
-      if (thickness <= 0) continue;
-      const y = Math.round(
-        13 + Math.sin(x * 0.035 + t * 0.45) * 3.5 + Math.cos(x * 0.02 - t * 0.3) * 2
-      );
-      const hiH = Math.max(1, Math.ceil(thickness * 0.45));
-      fillRectPx(ctx, x, y, 2, thickness, PAL.auroraLavLo);
-      fillRectPx(ctx, x, y + thickness - hiH, 2, hiH, PAL.auroraLavHi);
+    // Smooth curved horizon band steps (ZERO checkerboard!)
+    for (let x = 0; x < W; x += 10) {
+      const wave = Math.round(Math.sin(x * 0.024) * 2);
+      fillRectPx(ctx, x, 16 + wave, 10, 2, PAL.sky1);
+      fillRectPx(ctx, x, 33 + wave, 10, 2, PAL.sky2);
+      fillRectPx(ctx, x, 51 + wave, 10, 2, PAL.sky3);
     }
 
-    // Ribbon 2: Soft mint ribbon sweeping across twilight sky
-    for (let x = 52; x < 304; x += 2) {
-      const env = Math.sin(((x - 52) / 252) * Math.PI);
-      const thickness = Math.round(env * 6);
-      if (thickness <= 0) continue;
-      const y = Math.round(
-        21 + Math.sin(x * 0.028 - t * 0.5) * 4 + Math.sin(x * 0.05 + t * 0.35) * 1.8
-      );
-      const hiH = Math.max(1, Math.ceil(thickness * 0.5));
-      fillRectPx(ctx, x, y, 2, thickness, PAL.auroraMintLo);
-      fillRectPx(ctx, x, y + thickness - hiH, 2, hiH, PAL.auroraMintHi);
-    }
-  }
-
-  /** @private */
-  _drawMoonAndStars(ctx, t) {
-    // Crisp 1px and 3×3 cross stars
+    // Golden 4-point diamond stars & twinkling sky sparkles
     for (let i = 0; i < this._stars.length; i += 1) {
       const s = this._stars[i];
       const twinkle = Math.sin(t * s.speed + s.phase);
-      if (s.cross) {
-        fillRectPx(ctx, s.x, s.y, 1, 1, PAL.moonCream);
-        if (twinkle > -0.2) {
-          fillRectPx(ctx, s.x - 1, s.y, 1, 1, PAL.starBlue);
-          fillRectPx(ctx, s.x + 1, s.y, 1, 1, PAL.starBlue);
-          fillRectPx(ctx, s.x, s.y - 1, 1, 1, PAL.starBlue);
-          fillRectPx(ctx, s.x, s.y + 1, 1, 1, PAL.starBlue);
+      if (s.bigDiamond) {
+        // Big golden 4-point diamond star (like the reference image!)
+        fillRectPx(ctx, s.x - 1, s.y - 1, 3, 3, PAL.starAmber);
+        fillRectPx(ctx, s.x - 2, s.y, 5, 1, PAL.starGold);
+        fillRectPx(ctx, s.x, s.y - 2, 1, 5, PAL.starGold);
+        fillRectPx(ctx, s.x, s.y, 1, 1, PAL.starCore);
+      } else if (s.diamond) {
+        fillRectPx(ctx, s.x, s.y, 1, 1, PAL.starCore);
+        if (twinkle > -0.35) {
+          fillRectPx(ctx, s.x - 1, s.y, 1, 1, PAL.starGold);
+          fillRectPx(ctx, s.x + 1, s.y, 1, 1, PAL.starGold);
+          fillRectPx(ctx, s.x, s.y - 1, 1, 1, PAL.starGold);
+          fillRectPx(ctx, s.x, s.y + 1, 1, 1, PAL.starGold);
         }
       } else {
-        fillRectPx(ctx, s.x, s.y, 1, 1, twinkle > 0.1 ? PAL.moonCream : PAL.starBlue);
+        fillRectPx(ctx, s.x, s.y, 1, 1, twinkle > 0 ? PAL.starCore : PAL.starGold);
       }
     }
 
-    // Clean crescent moon (#fffbeb with #fde68a inner crescent shadow)
-    const mx = 266;
-    const my = 15;
-    fillEllipsePx(ctx, mx, my, 7, 7, PAL.moonGold);
-    fillEllipsePx(ctx, mx - 1, my, 6, 6, PAL.moonCream);
-    // Carve clean sky-coloured crescent cutout on top-right
-    fillEllipsePx(ctx, mx + 3, my - 2, 5, 5, PAL.sky0);
+    // Soft golden moon glow halo + big outlined golden crescent moon at (272, 22)
+    fillEllipsePx(ctx, 272, 22, 19, 19, 'rgba(255, 208, 66, 0.10)');
+    drawPartBuffer(ctx, this._moonBuf, 272, 22 + 17, false);
   }
 
   /** @private */
   _drawMountains(ctx) {
     const baseY = BRIDGE_Y;
-
-    // Layer 1: Far mountains
     for (const m of FAR_MOUNTAINS) {
       this._drawMountainPeak(ctx, m.x0, m.peakX, m.peakY, m.x1, baseY, true);
     }
-
-    // Layer 2: Near mountains
     for (const m of NEAR_MOUNTAINS) {
       this._drawMountainPeak(ctx, m.x0, m.peakX, m.peakY, m.x1, baseY, false);
     }
@@ -1754,125 +2171,235 @@ export class PenguinArena {
     const height = baseY - peakY;
     if (height <= 0) return;
 
-    const leftColor = isFar ? PAL.mtnMid : PAL.mtnSnow;
-    const midColor = isFar ? PAL.mtnShadow : PAL.mtnMid;
-    const rightColor = isFar ? PAL.mtnDeep : PAL.mtnShadow;
+    const snowLeft = isFar ? PAL.mtnSnowMid : PAL.mtnSnowHi;
+    const snowRight = isFar ? PAL.mtnRockHi : PAL.mtnSnowMid;
+    const rockLeft = isFar ? PAL.mtnRockMid : PAL.mtnRockHi;
+    const rockRight = isFar ? PAL.mtnRockLo : PAL.mtnRockMid;
 
     for (let y = peakY; y < baseY; y += 1) {
       const frac = (y - peakY) / height;
       const lx = Math.round(lerp(peakX, x0, frac));
       const rx = Math.round(lerp(peakX, x1, frac));
-      // Jagged ridge line stepping slightly right then left
-      const ridgeOffset = Math.round(Math.sin((y - peakY) * 0.35) * 2 + frac * 3);
+      const ridgeOffset = Math.round(Math.sin((y - peakY) * 0.32) * 2 + frac * 3);
       const ridgeX = clamp(peakX + ridgeOffset, lx + 1, rx - 1);
 
-      // Sunlit left face
-      fillRectPx(ctx, lx, y, ridgeX - lx, 1, leftColor);
+      const isSnowCap = frac < 0.42 + Math.sin(lx * 0.15) * 0.06;
+      const lCol = isSnowCap ? snowLeft : rockLeft;
+      const rCol = isSnowCap ? snowRight : rockRight;
 
-      // Soft periwinkle mid-tone transition strip near ridge & snowcap
-      const midW = Math.max(1, Math.round((rx - ridgeX) * (frac < 0.38 ? 0.55 : 0.28)));
-      fillRectPx(ctx, ridgeX, y, midW, 1, midColor);
-
-      // Slate-blue right shadow face
-      if (ridgeX + midW < rx) {
-        fillRectPx(ctx, ridgeX + midW, y, rx - (ridgeX + midW), 1, rightColor);
+      // Left sunlit slope
+      fillRectPx(ctx, lx, y, ridgeX - lx, 1, lCol);
+      // Right shaded slope
+      fillRectPx(ctx, ridgeX, y, rx - ridgeX, 1, rCol);
+      // Center ridge dark contour accent
+      if (y % 2 === 0 && frac < 0.65) {
+        fillRectPx(ctx, ridgeX, y, 1, 1, PAL.outlineSky);
       }
+      // Bold dark mountain silhouette outline (#152852 / #141020)
+      fillRectPx(ctx, lx, y, 1, 1, PAL.outline);
+      fillRectPx(ctx, rx - 1, y, 1, 1, PAL.outline);
     }
   }
 
   /** @private */
-  _drawIceCave(ctx, t) {
-    // 1. Warm dark indigo cave backdrop (y = 65..144)
-    fillRectPx(ctx, 0, DECK_BOTTOM, W, H - DECK_BOTTOM, PAL.caveBg);
+  _drawTorchlitCavern(ctx, t) {
+    // 1. Deep cavern void & warm torchlit inner stone arches (y = 86..180)
+    fillRectPx(ctx, 0, DECK_BOTTOM, W, H - DECK_BOTTOM, PAL.caveVoid);
+    fillRectPx(ctx, 18, DECK_BOTTOM, W - 36, FLOOR_Y - DECK_BOTTOM, PAL.caveDeep);
 
-    // 2. Clean layered stone/ice arches in background
-    const arches = [
-      { cx: 56, rx: 48, ry: 48 },
-      { cx: 160, rx: 62, ry: 52 },
-      { cx: 264, rx: 48, ry: 48 },
-    ];
-    // Outer arch layer (#262b47)
-    fillRectPx(ctx, 0, DECK_BOTTOM, W, 62, PAL.caveArch0);
-    for (const a of arches) {
-      fillEllipsePx(ctx, a.cx, FLOOR_Y, a.rx, a.ry, PAL.caveBg);
-    }
-
-    // Inner arch rim & pillars (#333b5e)
-    for (const pxCol of [0, 104, 214, 306]) {
-      fillRectPx(ctx, pxCol, DECK_BOTTOM, 14, FLOOR_Y - DECK_BOTTOM, PAL.caveArch0);
-      fillRectPx(ctx, pxCol + 2, DECK_BOTTOM, 10, FLOOR_Y - DECK_BOTTOM, PAL.caveArch1);
-    }
-
-    // Side rock walls framing ISHULEN
-    for (let y = DECK_BOTTOM; y < FLOOR_Y; y += 2) {
-      const step = Math.round(Math.sin(y * 0.14) * 3);
-      fillRectPx(ctx, 0, y, 16 + step, 2, PAL.caveArch1);
-      fillRectPx(ctx, 0, y, 9 + step, 2, PAL.caveWall);
-      fillRectPx(ctx, W - 16 - step, y, 16 + step, 2, PAL.caveArch1);
-      fillRectPx(ctx, W - 9 - step, y, 9 + step, 2, PAL.caveWall);
-    }
-
-    // Clean ceiling stalactites under the bridge
-    for (const st of this._caveStalactites) {
-      for (let dy = 0; dy < st.len; dy += 1) {
-        const w = Math.max(1, Math.round(st.w * (1 - dy / st.len)));
-        const x = Math.round(st.x - w / 2);
-        fillRectPx(ctx, x, DECK_BOTTOM + dy, w, 1, dy < 2 ? PAL.caveArch0 : PAL.caveArch1);
+    // Background stone masonry arches inside the cavern
+    const archPillars = [76, 152, 228];
+    for (const pxCol of archPillars) {
+      for (let by = DECK_BOTTOM + 4; by < FLOOR_Y - 6; by += 12) {
+        drawOutlinedBlock(
+          ctx,
+          pxCol,
+          by,
+          16,
+          12,
+          PAL.iceStoneHi,
+          PAL.iceStoneLo,
+          PAL.rockDark,
+          PAL.caveVoid
+        );
       }
     }
 
-    // 3. Hand-pixelated glowing mint-turquoise crystal clusters
+    // Warm torchlight radial glow pools behind the 2 wall torches
+    for (let i = 0; i < WALL_TORCHES.length; i += 1) {
+      const wt = WALL_TORCHES[i];
+      const flick = Math.round(Math.sin(t * 9 + i * 2.1) * 2);
+      fillEllipsePx(ctx, wt.x, wt.y - 2, 46 + flick, 34 + flick, 'rgba(242, 100, 25, 0.11)');
+      fillEllipsePx(ctx, wt.x, wt.y - 2, 28 + flick, 22 + flick, 'rgba(255, 187, 51, 0.16)');
+      fillEllipsePx(ctx, wt.x, wt.y - 3, 14 + flick, 12 + flick, 'rgba(255, 247, 153, 0.22)');
+    }
+
+    // 2. Chunky Outlined Warm Brown/Ochre Cave Rock Walls & Glacier-Ice Stone Blocks
+    const leftRockStack = [
+      { x: 0, y: 86, w: 24, h: 14, warm: true },
+      { x: 0, y: 100, w: 20, h: 14, warm: false },
+      { x: 0, y: 114, w: 22, h: 14, warm: true },
+      { x: 0, y: 128, w: 18, h: 14, warm: true },
+      { x: 0, y: 142, w: 24, h: 13, warm: false },
+      { x: 20, y: 86, w: 18, h: 11, warm: false },
+      { x: 18, y: 97, w: 14, h: 11, warm: true },
+    ];
+    for (const b of leftRockStack) {
+      if (b.warm) {
+        drawOutlinedBlock(ctx, b.x, b.y, b.w, b.h, PAL.rockHi, PAL.rockWarm, PAL.rockMid, PAL.rockDark);
+      } else {
+        drawOutlinedBlock(ctx, b.x, b.y, b.w, b.h, PAL.iceStoneHi, PAL.iceStoneLo, PAL.rockDark, PAL.caveVoid);
+      }
+      // Mirror on right cave wall
+      const rx = W - b.x - b.w;
+      if (b.warm) {
+        drawOutlinedBlock(ctx, rx, b.y, b.w, b.h, PAL.rockHi, PAL.rockWarm, PAL.rockMid, PAL.rockDark);
+      } else {
+        drawOutlinedBlock(ctx, rx, b.y, b.w, b.h, PAL.iceStoneHi, PAL.iceStoneLo, PAL.rockDark, PAL.caveVoid);
+      }
+    }
+
+    // Outlined rocky ceiling boulders along top of cave (under the bridge)
+    for (let cx = 36; cx <= 268; cx += 28) {
+      const isWarm = (cx / 28) % 2 === 0;
+      drawOutlinedBlock(
+        ctx,
+        cx,
+        DECK_BOTTOM,
+        28,
+        8,
+        isWarm ? PAL.rockHi : PAL.iceStoneHi,
+        isWarm ? PAL.rockWarm : PAL.iceStoneLo,
+        PAL.rockMid,
+        PAL.rockDark
+      );
+    }
+
+    // 3. Two Animated Wall Torches (x = 48, y = 112 and x = 272, y = 112)
+    for (let i = 0; i < WALL_TORCHES.length; i += 1) {
+      this._drawWallTorch(ctx, WALL_TORCHES[i].x, WALL_TORCHES[i].y, t, i);
+    }
+
+    // 4. Three Bright Glowing Cyan Magic Crystal Clusters (#e0ffff, #5ceeff, #17b8eb, #0d75ab with #141020 outlines)
     for (let i = 0; i < CRYSTAL_CLUSTERS.length; i += 1) {
       const c = CRYSTAL_CLUSTERS[i];
-      this._drawCrystalCluster(ctx, c.x, c.y, c.dir, t, i);
+      this._drawOutlinedCrystalCluster(ctx, c.x, c.y, c.dir, t, i);
     }
 
-    // 4. Clean 3-tone snow floor (y = 124..144)
-    // Periwinkle base (#aebfd9)
-    fillRectPx(ctx, 0, 124, W, H - 124, PAL.snowLo);
-    // Soft blue-white mid (#dce6f5)
-    fillRectPx(ctx, 0, 124, W, 11, PAL.snowMid);
-    // Creamy top highlight (#faf6ed) with gentle rounded snowdrift steps
-    fillRectPx(ctx, 0, 124, W, 5, PAL.snowHi);
-    for (let x = 0; x < W; x += 6) {
-      const mound = Math.round(Math.sin(x * 0.045) * 1.5);
-      fillRectPx(ctx, x, 124 + mound, 6, 3, PAL.snowHi);
-      fillRectPx(ctx, x, 127 + mound, 6, 4, PAL.snowMid);
+    // 5. Chunky Outlined Snow Floor (y = 154..180) with warm torchlit highlights & cool blue shadows
+    fillRectPx(ctx, 0, FLOOR_Y, W, 1, PAL.outline);
+    fillRectPx(ctx, 0, FLOOR_Y + 1, W, H - FLOOR_Y - 1, PAL.snowDeep);
+    fillRectPx(ctx, 0, FLOOR_Y + 1, W, 14, PAL.snowLo);
+    fillRectPx(ctx, 0, FLOOR_Y + 1, W, 8, PAL.snowMid);
+    fillRectPx(ctx, 0, FLOOR_Y + 1, W, 4, PAL.snowHi);
+
+    // Warm golden torch-lit snow pools under the two wall torches
+    for (const wt of WALL_TORCHES) {
+      fillRectPx(ctx, wt.x - 24, FLOOR_Y + 1, 48, 3, PAL.snowTorch);
+      fillRectPx(ctx, wt.x - 14, FLOOR_Y + 4, 28, 2, PAL.snowTorch);
     }
 
-    // Cute 3-pixel pawprints on the snow floor
+    // Billowy snowdrift mounds along the floor
+    for (let x = 0; x < W; x += 12) {
+      const h = Math.round(Math.sin(x * 0.05) * 1.5);
+      fillRectPx(ctx, x, FLOOR_Y + 1 + Math.max(0, h), 12, 3, PAL.snowHi);
+      fillRectPx(ctx, x, FLOOR_Y + 4 + Math.max(0, h), 12, 3, PAL.snowMid);
+    }
+
+    // Sub-surface chunky rock & glacier bricks along the very bottom rim (y = 169..180)
+    for (let bx = 0; bx < W; bx += 20) {
+      drawOutlinedBlock(
+        ctx,
+        bx,
+        169,
+        20,
+        11,
+        PAL.rockWarm,
+        PAL.rockMid,
+        PAL.rockDark,
+        PAL.caveVoid
+      );
+    }
+
+    // Bear pawprints in the snow
     for (let i = 0; i < this._pawprints.length; i += 1) {
       const pp = this._pawprints[i];
-      fillRectPx(ctx, pp.x, pp.y, 2, 1, PAL.snowLo);
-      fillRectPx(ctx, pp.x - 1, pp.y - 1, 1, 1, PAL.mtnMid);
-      fillRectPx(ctx, pp.x + 2, pp.y - 1, 1, 1, PAL.mtnMid);
+      fillRectPx(ctx, pp.x, pp.y, 3, 2, PAL.snowDeep);
+      fillRectPx(ctx, pp.x - 1, pp.y - 1, 1, 1, PAL.snowLo);
+      fillRectPx(ctx, pp.x + 1, pp.y - 1, 1, 1, PAL.snowLo);
+      fillRectPx(ctx, pp.x + 3, pp.y - 1, 1, 1, PAL.snowLo);
     }
   }
 
   /** @private */
-  _drawCrystalCluster(ctx, cx, cy, dir, t, idx) {
-    // Soft translucent mint glow halo (clean circle, NO checkerboard!)
-    const pulse = 0.08 + 0.03 * Math.sin(t * 2.2 + idx * 1.5);
-    fillEllipsePx(ctx, cx, cy - 5, 13, 9, `rgba(94, 234, 212, ${pulse.toFixed(3)})`);
+  _drawWallTorch(ctx, tx, ty, t, idx) {
+    // Iron wall sconce & oak torch handle with #141020 outline
+    fillRectPx(ctx, tx - 3, ty + 1, 6, 4, PAL.outline);
+    fillRectPx(ctx, tx - 2, ty + 2, 4, 2, PAL.boltLo);
+    fillRectPx(ctx, tx - 2, ty - 2, 4, 9, PAL.outline);
+    fillRectPx(ctx, tx - 1, ty - 1, 2, 7, PAL.oakWarm);
+    fillRectPx(ctx, tx - 3, ty - 3, 6, 3, PAL.outline);
+    fillRectPx(ctx, tx - 2, ty - 2, 4, 1, PAL.boltHi);
 
-    // 3 angled crystal shards per cluster
+    // Flickering 4-tone pixel flame (#fff799, #ffbb33, #f26419, #b82914) with #141020 outline
+    const sway = Math.round(Math.sin(t * 14 + idx * 3.1));
+    const stretch = Math.round(Math.cos(t * 11 + idx) * 1);
+
+    // Outer dark flame contour
+    fillRectPx(ctx, tx - 4, ty - 9, 8, 7, PAL.outline);
+    fillRectPx(ctx, tx - 3 + sway, ty - 12 - Math.max(0, stretch), 6, 4, PAL.outline);
+    fillRectPx(ctx, tx - 1 + sway, ty - 14 - Math.max(0, stretch), 3, 3, PAL.outline);
+
+    // Deep red/orange outer flame
+    fillRectPx(ctx, tx - 3, ty - 8, 6, 5, PAL.fireRed);
+    fillRectPx(ctx, tx - 2 + sway, ty - 11 - Math.max(0, stretch), 4, 4, PAL.fireOrange);
+    fillRectPx(ctx, tx + sway, ty - 13 - Math.max(0, stretch), 1, 2, PAL.fireOrange);
+
+    // Golden mid flame
+    fillRectPx(ctx, tx - 2, ty - 8, 4, 5, PAL.fireGold);
+    fillRectPx(ctx, tx - 1 + sway, ty - 10 - Math.max(0, stretch), 2, 3, PAL.fireGold);
+
+    // Bright yellow-white core
+    fillRectPx(ctx, tx - 1, ty - 7, 2, 4, PAL.fireCore);
+  }
+
+  /** @private */
+  _drawOutlinedCrystalCluster(ctx, cx, cy, dir, t, idx) {
+    // Translucent cyan magic aura
+    const pulse = 0.12 + 0.04 * Math.sin(t * 2.6 + idx * 1.7);
+    fillEllipsePx(ctx, cx, cy - 9, 18, 13, `rgba(92, 238, 255, ${pulse.toFixed(3)})`);
+
+    // 3 chunky faceted crystal shards with crisp #141020 outlines
     const shards = [
-      { ox: -3 * dir, h: 10, w: 3, lean: -1 * dir },
-      { ox: 0, h: 14, w: 4, lean: 1 * dir },
-      { ox: 4 * dir, h: 8, w: 3, lean: 2 * dir },
+      { ox: -5 * dir, h: 14, w: 5, lean: -2 * dir },
+      { ox: 0, h: 20, w: 6, lean: 1 * dir },
+      { ox: 6 * dir, h: 12, w: 5, lean: 3 * dir },
     ];
+
     for (const sh of shards) {
+      // Pass 1: #141020 dark outline around the crystal shard
+      for (let dy = -1; dy <= sh.h; dy += 1) {
+        const frac = clamp(dy / sh.h, 0, 1);
+        const taper = dy > sh.h - 4 ? Math.max(1, sh.w - (dy - (sh.h - 4))) : sh.w;
+        const sx = Math.round(cx + sh.ox + frac * sh.lean - taper / 2);
+        const sy = cy - dy;
+        fillRectPx(ctx, sx - 1, sy, taper + 2, 1, PAL.outline);
+      }
+      // Pass 2: 4-tone faceted cyan crystal interior (#e0ffff, #5ceeff, #17b8eb, #0d75ab)
       for (let dy = 0; dy < sh.h; dy += 1) {
         const frac = dy / sh.h;
-        const w = dy > sh.h - 3 ? Math.max(1, sh.w - (dy - (sh.h - 3))) : sh.w;
-        const sx = Math.round(cx + sh.ox + frac * sh.lean - w / 2);
+        const taper = dy > sh.h - 4 ? Math.max(1, sh.w - (dy - (sh.h - 4))) : sh.w;
+        const sx = Math.round(cx + sh.ox + frac * sh.lean - taper / 2);
         const sy = cy - dy;
-        fillRectPx(ctx, sx, sy, w, 1, PAL.crystalLo);
-        if (w >= 2) {
-          fillRectPx(ctx, sx, sy, Math.ceil(w * 0.6), 1, PAL.crystalMid);
+        fillRectPx(ctx, sx, sy, taper, 1, PAL.crystalLo);
+        if (taper >= 2) {
+          fillRectPx(ctx, sx, sy, Math.ceil(taper * 0.7), 1, PAL.crystalMid);
         }
-        if (dy >= sh.h - 3) {
-          fillRectPx(ctx, sx, sy, 1, 1, PAL.crystalHi);
+        if (taper >= 3) {
+          fillRectPx(ctx, sx, sy, Math.ceil(taper * 0.4), 1, PAL.crystalHi);
+        }
+        if (dy >= sh.h - 4 || dy % 5 === 0) {
+          fillRectPx(ctx, sx, sy, 1, 1, PAL.crystalCore);
         }
       }
     }
@@ -1880,37 +2407,22 @@ export class PenguinArena {
 
   /** @private */
   _drawTimberIceBridge(ctx, t) {
-    // 1. Warm honey-cedar vertical support beams & lantern posts on left and right
+    // 1. Sturdy Outlined Oak Support Posts & Lantern Cross-Arms on Left and Right
     for (const L of LANTERNS) {
       const px = L.postX;
-      // Post outline
-      fillRectPx(ctx, px - 3, 35, 6, FLOOR_Y - 35, PAL.outlineUmber);
-      // Main cedar timber post
-      fillRectPx(ctx, px - 2, 36, 4, FLOOR_Y - 36, PAL.woodDark);
-      fillRectPx(ctx, px - 1, 36, 2, FLOOR_Y - 36, PAL.woodMid);
-      fillRectPx(ctx, px - 1, 36, 1, FLOOR_Y - 36, PAL.woodHi);
-
-      // Horizontal lantern cross-arm
-      const armX = L.armDir > 0 ? px + 2 : px - 10;
-      fillRectPx(ctx, armX, 37, 9, 4, PAL.outlineUmber);
-      fillRectPx(ctx, armX + 1, 38, 7, 2, PAL.woodMid);
-      fillRectPx(ctx, armX + 1, 38, 7, 1, PAL.woodHi);
-
-      // Diagonal timber brace under bridge deck
-      for (let k = 0; k < 14; k += 1) {
-        const bx = px + L.armDir * (2 + k);
-        const by = DECK_BOTTOM + 12 - k;
-        fillRectPx(ctx, bx, by, 3, 3, PAL.woodDark);
-        fillRectPx(ctx, bx, by, 2, 2, PAL.woodMid);
-      }
+      drawOutlinedBlock(ctx, px - 4, 46, 8, FLOOR_Y - 46, PAL.oakHi, PAL.oakWarm, PAL.oakMid, PAL.oakDark);
+      const armX = L.armDir > 0 ? px + 2 : px - 12;
+      drawOutlinedBlock(ctx, armX, 48, 10, 5, PAL.oakHi, PAL.oakWarm, PAL.oakMid, PAL.oakDark);
     }
 
-    // Continuous honey-cedar under-beam spanning the bridge (`y = 62..65`)
-    fillRectPx(ctx, 14, 62, W - 28, 4, PAL.outlineUmber);
-    fillRectPx(ctx, 15, 63, W - 30, 2, PAL.woodDark);
-    fillRectPx(ctx, 15, 63, W - 30, 1, PAL.woodMid);
+    // Heavy continuous oak under-beam spanning the bridge (y = 81..86) with iron bolts
+    drawOutlinedBlock(ctx, 10, 81, W - 20, 6, PAL.oakHi, PAL.oakWarm, PAL.oakMid, PAL.oakDark);
+    for (let bx = 18; bx <= W - 18; bx += 29) {
+      fillRectPx(ctx, bx - 1, 83, 2, 2, PAL.boltLo);
+      fillRectPx(ctx, bx - 1, 83, 1, 1, PAL.boltHi);
+    }
 
-    // Build lookup of open trapdoors so we leave gaps in the ice deck where open
+    // Lookup for open trapdoor gaps
     const isOpenGap = (x) => {
       for (let i = 0; i < this._trapdoors.length; i += 1) {
         const d = this._trapdoors[i];
@@ -1921,90 +2433,92 @@ export class PenguinArena {
       return false;
     };
 
-    // 2. Clean beveled ice blocks (`y = 57..62`) topped with creamy snow cushions (`y = 54..57`)
+    // 2. Outlined Glacier-Ice Deck Blocks (y = 75..81) topped with Snow Cushions (y = 72..75)
     const blockWidth = 16;
-    for (let bx = 20; bx < 300; bx += blockWidth) {
+    for (let bx = 12; bx < W - 12; bx += blockWidth) {
       for (let dx = 0; dx < blockWidth; dx += 1) {
         const x = bx + dx;
         if (isOpenGap(x)) continue;
 
         const isSeam = dx === 0 || dx === blockWidth - 1;
-        // Ice block body
-        fillRectPx(ctx, x, 57, 1, 5, isSeam ? PAL.iceDeep : PAL.iceMid);
+        // Outlined ice deck block
+        fillRectPx(ctx, x, 75, 1, 6, isSeam ? PAL.outline : PAL.iceMid);
         if (!isSeam) {
-          fillRectPx(ctx, x, 57, 1, 2, PAL.iceHi);
-          fillRectPx(ctx, x, 61, 1, 1, PAL.iceLo);
+          fillRectPx(ctx, x, 75, 1, 2, PAL.iceHi);
+          fillRectPx(ctx, x, 79, 1, 1, PAL.iceLo);
+          fillRectPx(ctx, x, 80, 1, 1, PAL.iceDeep);
         }
 
-        // Rounded creamy snow cushion on top of the ice block
-        const edgeInset = dx === 0 || dx === blockWidth - 1 ? 1 : 0;
-        fillRectPx(ctx, x, 54 + edgeInset, 1, 2, PAL.snowHi);
-        fillRectPx(ctx, x, 56, 1, 1, PAL.snowMid);
+        // Plump snow cushion on top of the bridge
+        const edgeInset = isSeam ? 1 : 0;
+        fillRectPx(ctx, x, 72 + edgeInset, 1, 1, PAL.outline);
+        fillRectPx(ctx, x, 73 + edgeInset, 1, 2 - edgeInset, PAL.snowHi);
+        fillRectPx(ctx, x, 75, 1, 1, PAL.snowMid);
       }
     }
 
-    // 3. Crisp icicles hanging along the bridge underside
+    // 3. Hanging Icicles along the underside of the oak beam
     for (const ic of this._icicles) {
       if (isOpenGap(ic.x)) continue;
       for (let dy = 0; dy < ic.len; dy += 1) {
         const w = dy < 2 ? 2 : 1;
-        const color = dy === 0 ? PAL.iceHi : dy < ic.len - 1 ? PAL.iceMid : PAL.iceLo;
-        fillRectPx(ctx, ic.x, DECK_BOTTOM + dy, w, 1, color);
+        fillRectPx(ctx, ic.x - 1, DECK_BOTTOM + dy, w + 2, 1, PAL.outline);
+        const col = dy === 0 ? PAL.iceHi : dy < ic.len - 1 ? PAL.iceMid : PAL.iceLo;
+        fillRectPx(ctx, ic.x, DECK_BOTTOM + dy, w, 1, col);
       }
     }
 
-    // 4. Hinged wooden trapdoors (`#7c4326`, `#a8623a`, `#fbbf24` brass hinge)
+    // 4. Hinged Wooden Trapdoors under each Penguin (#4a2816, #754224, #a66338, #cf8854)
     for (let i = 0; i < this._trapdoors.length; i += 1) {
       const d = this._trapdoors[i];
       if (d.angle <= 2) {
-        // Closed trapdoor: warm timber plank set into the bridge with brass hinge & snow cushion
-        fillRectPx(ctx, d.x0, 57, d.w, 6, PAL.outlineUmber);
-        fillRectPx(ctx, d.x0 + 1, 58, d.w - 2, 4, PAL.trapDark);
-        fillRectPx(ctx, d.x0 + 1, 58, d.w - 2, 2, PAL.trapMid);
-        // Brass hinge pin on left
-        fillRectPx(ctx, d.x0 + 1, 59, 2, 2, PAL.brass);
-        // Creamy snow cushion resting on closed door
-        fillRectPx(ctx, d.x0 + 1, 54, d.w - 2, 2, PAL.snowHi);
-        fillRectPx(ctx, d.x0 + 1, 56, d.w - 2, 1, PAL.snowMid);
+        // Closed trapdoor plank with iron hinge bolts & snow cushion
+        drawOutlinedBlock(ctx, d.x0, 75, d.w, 7, PAL.oakHi, PAL.oakWarm, PAL.oakMid, PAL.oakDark);
+        fillRectPx(ctx, d.x0 + 2, 77, 2, 2, PAL.boltHi);
+        fillRectPx(ctx, d.x0 + d.w - 4, 77, 2, 2, PAL.boltLo);
+        // Snow cushion resting on top
+        fillRectPx(ctx, d.x0 + 1, 72, d.w - 2, 1, PAL.outline);
+        fillRectPx(ctx, d.x0 + 1, 73, d.w - 2, 2, PAL.snowHi);
+        fillRectPx(ctx, d.x0 + 1, 75, d.w - 2, 1, PAL.snowMid);
       } else {
-        // Open trapdoor swinging down from the left brass hinge
+        // Swinging open trapdoor plank
         const rad = (d.angle * Math.PI) / 180;
         const cosA = Math.cos(rad);
         const sinA = Math.sin(rad);
-        const hx = d.x0 + 1;
-        const hy = 61;
+        const hx = d.x0 + 2;
+        const hy = 80;
         for (let u = 0; u < d.w; u += 1) {
           const px = Math.round(hx + u * cosA);
           const py = Math.round(hy + u * sinA);
-          fillRectPx(ctx, px - 1, py - 1, 4, 4, PAL.outlineUmber);
-          fillRectPx(ctx, px, py, 2, 2, u % 4 === 0 ? PAL.trapDark : PAL.trapMid);
+          fillRectPx(ctx, px - 2, py - 2, 5, 5, PAL.outline);
+          fillRectPx(ctx, px - 1, py - 1, 3, 3, u % 4 === 0 ? PAL.oakMid : PAL.oakWarm);
+          fillRectPx(ctx, px - 1, py - 1, 2, 1, PAL.oakHi);
         }
-        // Brass hinge pin
-        fillRectPx(ctx, hx, hy - 1, 2, 2, PAL.brass);
+        fillRectPx(ctx, hx - 1, hy - 1, 2, 2, PAL.boltHi);
       }
     }
 
-    // 5. Cute hanging iron lanterns casting soft concentric translucent warm golden circles
+    // 5. Warm Hanging Iron Lanterns at both ends casting soft golden glow circles
     for (let i = 0; i < LANTERNS.length; i += 1) {
       const L = LANTERNS[i];
       const pulse = Math.round(Math.sin(t * 5 + i * 2));
 
-      // Smooth concentric warm golden glow circles (NO checkerboard!)
-      fillEllipsePx(ctx, L.x, L.y + 3, 24 + pulse, 18 + pulse, 'rgba(253, 224, 71, 0.07)');
-      fillEllipsePx(ctx, L.x, L.y + 3, 13 + pulse, 10 + pulse, 'rgba(253, 224, 71, 0.14)');
+      fillEllipsePx(ctx, L.x, L.y + 4, 24 + pulse, 18 + pulse, 'rgba(255, 208, 66, 0.09)');
+      fillEllipsePx(ctx, L.x, L.y + 4, 13 + pulse, 10 + pulse, 'rgba(255, 243, 161, 0.16)');
 
-      // Hanging chain & iron cap
-      fillRectPx(ctx, L.x, 39, 1, 2, PAL.outlinePlum);
-      fillRectPx(ctx, L.x - 2, 41, 5, 1, PAL.outlinePlum);
+      // Chain & iron roof
+      fillRectPx(ctx, L.x, 52, 1, 3, PAL.outline);
+      fillRectPx(ctx, L.x - 3, 55, 7, 2, PAL.outline);
+      fillRectPx(ctx, L.x - 2, 55, 5, 1, PAL.boltHi);
 
-      // Lantern glass housing
-      fillRectPx(ctx, L.x - 2, 42, 5, 5, PAL.outlinePlum);
-      fillRectPx(ctx, L.x - 1, 42, 3, 4, PAL.flameAmber);
-      fillRectPx(ctx, L.x - 1, 43, 3, 2, PAL.flameGold);
-      fillRectPx(ctx, L.x, 43, 1, 2, PAL.flameCore);
+      // Outlined lantern glass & glowing flame
+      fillRectPx(ctx, L.x - 3, 57, 7, 6, PAL.outline);
+      fillRectPx(ctx, L.x - 2, 57, 5, 5, PAL.fireOrange);
+      fillRectPx(ctx, L.x - 1, 58, 3, 3, PAL.fireGold);
+      fillRectPx(ctx, L.x, 58, 1, 2, PAL.fireCore);
 
       // Iron base
-      fillRectPx(ctx, L.x - 2, 46, 5, 1, PAL.outlinePlum);
+      fillRectPx(ctx, L.x - 3, 63, 7, 2, PAL.outline);
     }
   }
 
@@ -2023,8 +2537,8 @@ export class PenguinArena {
         frameName = p.blinkTimer > 0 ? 'blink' : breathStep ? 'idle1' : 'idle0';
       } else if (p.status === 'cheer') {
         if (p.cheerDelay <= 0) {
-          const el = 0.72 - p.timer;
-          yOffset = -Math.round(Math.abs(Math.sin((el * Math.PI) / 0.36)) * 4);
+          const el = 0.75 - p.timer;
+          yOffset = -Math.round(Math.abs(Math.sin((el * Math.PI) / 0.375)) * 6);
           frameName = 'cheer';
         }
       } else if (p.status === 'panic') {
@@ -2039,16 +2553,15 @@ export class PenguinArena {
       const drawX = Math.round(p.x + xOffset);
       const drawY = Math.round(p.y + yOffset);
 
-      // Soft contact shadow under feet
+      // Contact shadow on snow cushion or cave snow floor
       if (p.status === 'idle' || p.status === 'cheer') {
-        fillRectPx(ctx, drawX - 4, BRIDGE_Y, 8, 1, PAL.snowLo);
+        fillRectPx(ctx, drawX - 6, BRIDGE_Y, 12, 2, PAL.snowLo);
       } else if (p.status === 'landed') {
-        fillRectPx(ctx, drawX - 5, FLOOR_Y, 10, 1, PAL.snowLo);
+        fillRectPx(ctx, drawX - 7, FLOOR_Y + 1, 14, 2, PAL.snowLo);
       }
 
-      // PENGUIN_SPRITES face RIGHT by default; flip when facing left
-      const grid = PENGUIN_SPRITES[frameName] || PENGUIN_SPRITES.idle0;
-      drawStringSprite(ctx, grid, PENGUIN_PALETTE, drawX, drawY, p.facingDir < 0);
+      const buf = PENGUIN_FRAME_CACHE[frameName] || PENGUIN_FRAME_CACHE.idle0;
+      drawPartBuffer(ctx, buf, drawX, drawY + 1, p.facingDir < 0);
 
       // Cute alert badge "!" when panicking or freshly landed
       if (p.status === 'panic' || (p.status === 'landed' && Math.floor(t * 6) % 2 === 0)) {
@@ -2056,10 +2569,10 @@ export class PenguinArena {
           ctx,
           '!',
           drawX,
-          drawY - 17,
-          PAL.moonCream,
-          PAL.flameGold,
-          PAL.outlinePlum
+          drawY - 28,
+          PAL.moonHi,
+          PAL.fireOrange,
+          PAL.outline
         );
       }
     }
@@ -2071,8 +2584,9 @@ export class PenguinArena {
     let frameName = 'idle0';
 
     if (b.mode === 'sprint') {
-      const cycle = ['run0', 'run1', 'run2', 'run3'];
-      const idx = Math.floor(b.runTime * 14) % cycle.length;
+      // 6-phase animated 4-limb gallop!
+      const cycle = ['run0', 'run1', 'run2', 'run3', 'run4', 'run5'];
+      const idx = Math.floor(b.runTime * 16) % cycle.length;
       frameName = cycle[idx];
     } else if (b.mode === 'chompOpen') {
       frameName = 'chompOpen';
@@ -2081,23 +2595,22 @@ export class PenguinArena {
     } else if (b.mode === 'grumble') {
       frameName = Math.floor(t * 8) % 2 === 0 ? 'chompOpen' : 'chompClosed';
     } else {
-      // 'wait' or 'watch': gentle breathing idle frame swap & occasional blink
       if (b.blinkTimer > 0) {
-        frameName = 'chompClosed';
+        frameName = 'blink';
       } else {
         frameName = Math.sin(t * 2.4) > 0.25 ? 'idle1' : 'idle0';
       }
     }
 
     const drawX = Math.round(b.x);
-    const drawY = FLOOR_Y;
+    const drawY = FLOOR_Y + 2;
 
-    // Ground shadow cluster on the snow floor
-    fillRectPx(ctx, drawX - 14, FLOOR_Y, 28, 2, PAL.snowLo);
+    // Ground shadow cluster under the massive 70×44 bear
+    fillRectPx(ctx, drawX - 24, FLOOR_Y + 1, 48, 3, PAL.snowDeep);
+    fillRectPx(ctx, drawX - 20, FLOOR_Y + 2, 40, 2, PAL.outline);
 
-    // BEAR_SPRITES face RIGHT by default; flip horizontally when dir < 0
-    const grid = BEAR_SPRITES[frameName] || BEAR_SPRITES.idle0;
-    drawStringSprite(ctx, grid, BEAR_PALETTE, drawX, drawY, b.dir < 0);
+    const buf = BEAR_FRAME_CACHE[frameName] || BEAR_FRAME_CACHE.idle0;
+    drawPartBuffer(ctx, buf, drawX, drawY, b.dir < 0);
   }
 
   /** @private */
@@ -2125,7 +2638,10 @@ export class PenguinArena {
 
       if (pt.kind === 'snow') {
         fillRectPx(ctx, x, y, pt.size, pt.size, pt.color);
+      } else if (pt.kind === 'ember') {
+        fillRectPx(ctx, x, y, 1, 1, pt.color);
       } else if (pt.kind === 'feather') {
+        fillRectPx(ctx, x - 1, y - 1, 4, 3, PAL.outline);
         fillRectPx(ctx, x, y, 2, 1, pt.color);
         fillRectPx(ctx, x + 1, y + 1, 1, 1, pt.color);
       } else if (pt.kind === 'spark') {
@@ -2145,16 +2661,16 @@ export class PenguinArena {
   _drawBearSpeechBubble(ctx) {
     const b = this._bear;
     if (!b.bubbleText) return;
-    const bx = clamp(Math.round(b.x + b.dir * 14), 24, W - 24);
-    const by = FLOOR_Y - 25;
+    const bx = clamp(Math.round(b.x + b.dir * 22), 28, W - 28);
+    const by = FLOOR_Y - 38;
     drawSpeechBubble(
       ctx,
       b.bubbleText,
       bx,
       by,
-      PAL.moonCream,
-      PAL.flameGold,
-      PAL.outlinePlum
+      PAL.moonHi,
+      PAL.fireOrange,
+      PAL.outline
     );
   }
 }
