@@ -31,9 +31,9 @@ const SLOT_L = 58;
 const SLOT_R = 338;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=2',
-  bear: './assets/canva-bear.png?v=2',
-  penguin: './assets/canva-penguin.png?v=2',
+  bg: './assets/canva-bg.png?v=3',
+  bear: './assets/canva-bear.png?v=3',
+  penguin: './assets/canva-penguin.png?v=3',
 };
 
 const BEAR_CELL_W = 76;
@@ -409,7 +409,10 @@ export class PenguinArena {
       targetIndex: null,
       targetX: null,
       runTime: 0,
-      breathTimer: 1.4,
+      breathCycleTime: 0.85, // starts near first inhale peak so user sees breathing immediately
+      breathStreamTimer: 0,
+      isExhaling: false,
+      breathPhase: 0, // 0..1 normalized cycle: 0..0.42 inhale, 0.42..0.72 exhale frost stream, 0.72..1.0 rest
       dustTimer: 0,
       pawprintCooldown: 0,
       pawSide: 0,
@@ -820,21 +823,25 @@ export class PenguinArena {
   /** @private */
   _spawnBreath(heavy = false) {
     const b = this._bear;
-    const snoutX = b.x + b.dir * 34;
-    const snoutY = BEAR_FLOOR_Y - 44;
-    const count = heavy ? 4 : 2;
+    // Exact mouth/snout coordinates on the 76×56 Cell 0 bear sprite
+    const mouthX = b.x + b.dir * 27;
+    const mouthY = BEAR_FLOOR_Y - 42;
+    const count = heavy ? 5 : 3;
     for (let i = 0; i < count; i += 1) {
+      const spread = (Math.random() - 0.45) * 6;
+      const speed = (heavy ? 18 : 11) + i * 4 + Math.random() * 6;
       this._addParticle({
-        kind: 'puff',
-        x: snoutX + b.dir * (i * 2),
-        y: snoutY - i,
-        vx: b.dir * (heavy ? 18 + i * 5 : 8 + i * 3),
-        vy: -6 - i * 2,
-        g: 0,
-        r: heavy ? 3.5 : 2.2,
-        life: 0.78,
-        max: 0.78,
-        color: PAL.snowMid,
+        kind: 'frostBreath',
+        x: mouthX + b.dir * (i * 2),
+        y: mouthY + spread * 0.25,
+        vx: b.dir * speed,
+        vy: -4 - i * 1.6 + spread * 0.6,
+        g: -7, // cold vapour curls gently upward as it slows
+        r0: heavy ? 2.0 : 1.5,
+        r1: (heavy ? 6.5 : 5.0) + Math.random() * 1.5,
+        life: (heavy ? 0.95 : 0.85) + Math.random() * 0.2,
+        max: heavy ? 1.05 : 0.95,
+        hasCrystal: i % 2 === 0,
       });
     }
   }
@@ -1040,11 +1047,26 @@ export class PenguinArena {
     }
 
     if (bear.mode === 'wait' || bear.mode === 'watch') {
-      bear.breathTimer -= dt;
-      if (bear.breathTimer <= 0) {
-        this._spawnBreath(false);
-        bear.breathTimer = bear.mode === 'watch' ? 1.15 : 2.1;
+      // Rhythmic breathing cycle: 2.3s calm cycle in 'wait', 1.35s excited panting in 'watch'
+      const cycleDuration = bear.mode === 'watch' ? 1.35 : 2.3;
+      bear.breathCycleTime = (bear.breathCycleTime + dt) % cycleDuration;
+      bear.breathPhase = bear.breathCycleTime / cycleDuration;
+
+      // Exhale window (0.42 -> 0.70 of cycle): chest compresses while icy frost stream puffs from mouth!
+      const inExhaleWindow = bear.breathPhase >= 0.42 && bear.breathPhase <= 0.70;
+      if (inExhaleWindow) {
+        bear.isExhaling = true;
+        bear.breathStreamTimer -= dt;
+        if (bear.breathStreamTimer <= 0) {
+          this._spawnBreath(bear.mode === 'watch');
+          bear.breathStreamTimer = 0.085; // continuous stream of frost puffs during exhale!
+        }
+      } else {
+        bear.isExhaling = false;
+        bear.breathStreamTimer = 0;
       }
+    } else {
+      bear.isExhaling = false;
     }
 
     const { landed, airborne } = this._findActiveDropTarget();
@@ -1439,9 +1461,9 @@ export class PenguinArena {
     } else if (b.mode === 'grumble') {
       cellIndex = 3;
     } else {
-      // Stand & Wait (Cell 0) with subtle 1px breathing bob
+      // Stand & Wait (Cell 0): paws stay 100% planted while 3-slice chest & head breathe
       cellIndex = 0;
-      yOffset = Math.sin(t * 2.5) > 0.3 ? 1 : 0;
+      yOffset = 0;
     }
 
     const drawX = Math.round(b.x);
@@ -1453,22 +1475,73 @@ export class PenguinArena {
     if (bImg && bImg.complete && bImg.naturalWidth > 0) {
       const sx = cellIndex * BEAR_CELL_W;
       ctx.save();
-      // Feet in 56×44 cell are bottom-aligned at y = 42 (63px from top in 84×66 space -> +3px bottom margin)
-      ctx.translate(drawX, drawY + 3 - BEAR_DRAW_H);
+      ctx.translate(drawX, drawY + 2 - BEAR_DRAW_H);
       if (b.dir < 0) {
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(
-        bImg,
-        sx,
-        0,
-        BEAR_CELL_W,
-        BEAR_CELL_H,
-        -Math.round(BEAR_DRAW_W / 2),
-        0,
-        BEAR_DRAW_W,
-        BEAR_DRAW_H
-      );
+
+      if (cellIndex === 0 && (b.mode === 'wait' || b.mode === 'watch')) {
+        // 3-Slice Synchronized Breathing Animation (paws stay 100% planted on snow floor!):
+        // Phase 0.00..0.42 = Inhale (chest & head swell up -2px, chest expands +1px forward)
+        // Phase 0.42..0.70 = Exhale (chest compresses back down while snout pushes +1px forward blowing icy frost!)
+        // Phase 0.70..1.00 = Calm rest
+        const ph = b.breathPhase || 0;
+        let inhaleAmount = 0; // 0..1
+        let exhalePush = 0;   // 0..1
+        if (ph < 0.42) {
+          inhaleAmount = Math.sin((ph / 0.42) * (Math.PI * 0.5));
+        } else if (ph < 0.72) {
+          const exT = (ph - 0.42) / 0.30;
+          inhaleAmount = Math.cos(exT * (Math.PI * 0.5));
+          exhalePush = Math.sin(exT * Math.PI);
+        }
+
+        const chestLiftY = -Math.round(inhaleAmount * 2);     // 0 to -2px upward chest heave
+        const chestExpandX = Math.round(inhaleAmount * 1);    // 0 to +1px chest expansion
+        const headLiftY = -Math.round(inhaleAmount * 2) + Math.round(exhalePush * 1); // rises on inhale, dips slightly on exhale
+        const headForwardX = Math.round(exhalePush * 1);      // pushes +1px forward while blowing frost breath!
+
+        const halfW = Math.round(BEAR_DRAW_W / 2);
+
+        // Slice 1 (Bottom legs & paws: sy = 38..56) — 100% stationary planted on snow floor!
+        ctx.drawImage(
+          bImg,
+          sx, 38, BEAR_CELL_W, 18,
+          -halfW, 38, BEAR_DRAW_W, 18
+        );
+
+        // Slice 2 (Mid ribcage, belly & shoulder hump: sy = 18..39) — heaves up & expands on inhale!
+        ctx.drawImage(
+          bImg,
+          sx, 18, BEAR_CELL_W, 21,
+          -halfW, 18 + chestLiftY, BEAR_DRAW_W + chestExpandX, 21 - chestLiftY
+        );
+
+        // Slice 3 (Upper shoulder, neck, head & snout: sy = 0..19) — rises on inhale, pushes forward on icy exhale!
+        ctx.drawImage(
+          bImg,
+          sx, 0, BEAR_CELL_W, 19,
+          -halfW + headForwardX, headLiftY, BEAR_DRAW_W, 19
+        );
+
+        // Subtle icy cyan-white frost glow at the mouth opening during active exhale!
+        if (b.isExhaling) {
+          fillRectPx(ctx, 25 + headForwardX, 11 + headLiftY, 2, 2, '#d8f8ff');
+          fillRectPx(ctx, 27 + headForwardX, 10 + headLiftY, 2, 2, '#8ce8ff');
+        }
+      } else {
+        ctx.drawImage(
+          bImg,
+          sx,
+          0,
+          BEAR_CELL_W,
+          BEAR_CELL_H,
+          -Math.round(BEAR_DRAW_W / 2),
+          0,
+          BEAR_DRAW_W,
+          BEAR_DRAW_H
+        );
+      }
       ctx.restore();
     } else {
       // Minimal fallback silhouette if image is still decoding
@@ -1513,6 +1586,21 @@ export class PenguinArena {
           fillRectPx(ctx, x - 1, y, 3, 1, pt.color);
           fillRectPx(ctx, x, y - 1, 1, 3, pt.color);
         }
+      } else if (pt.kind === 'frostBreath') {
+        // Multi-layered icy breath cloud expanding, curling upward, and fading with ice crystal sparkles
+        const age = 1 - pt.life / pt.max; // 0 (at mouth) -> 1 (dissipated)
+        const r = Math.max(1, Math.round(pt.r0 + (pt.r1 - pt.r0) * Math.pow(age, 0.7)));
+        const alpha = age < 0.15 ? age / 0.15 : Math.max(0, (1 - age) / 0.85);
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.55;
+        fillEllipsePx(ctx, x, y, r, Math.max(1, Math.round(r * 0.75)), '#7ad8ff');
+        ctx.globalAlpha = alpha * 0.82;
+        fillEllipsePx(ctx, x - Math.sign(pt.vx || 1), y, Math.max(1, Math.round(r * 0.6)), Math.max(1, Math.round(r * 0.48)), '#e6fbff');
+        if (pt.hasCrystal && age > 0.18 && age < 0.78) {
+          ctx.globalAlpha = alpha * 0.95;
+          fillRectPx(ctx, x, y - 1, 1, 1, '#ffffff');
+        }
+        ctx.restore();
       } else if (pt.kind === 'puff') {
         const r = Math.max(1, Math.round(pt.r * (pt.life / pt.max)));
         fillEllipsePx(ctx, x, y, r, r, pt.color);
