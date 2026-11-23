@@ -21,19 +21,19 @@ const STYLE_ID = 'iq-penguin-arena-styles-canva-16bit';
 const W = 396;
 const H = 224;
 
-const BRIDGE_Y = 78; // Penguin feet level on top of the elevated timber & ice bridge deck (less wasted sky above!)
-const FLOOR_Y = 197; // Snow floor level inside ISHULEN where falling penguins land
-const BEAR_FLOOR_Y = 201; // Polar bear paw contact level on the snowy cave floor
+const BRIDGE_Y = 68; // Penguin feet level on top of the individual hatches on the new high bridge
+const FLOOR_Y = 199; // Snow floor level inside ISHULEN where falling penguins land
+const BEAR_FLOOR_Y = 203; // Polar bear paw contact level on the wide snowy cave floor
 const GRAVITY = 520; // px/s² in 396×224 space
-const BEAR_HOME_X = 94;
+const BEAR_HOME_X = 104;
 const BEAR_SPEED = 240; // px/s gallop sprint speed across the snow floor
-const SLOT_L = 42;
-const SLOT_R = 354;
+const SLOT_L = 34;
+const SLOT_R = 362;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=4',
-  bear: './assets/canva-bear.png?v=4',
-  penguin: './assets/canva-penguin.png?v=4',
+  bg: './assets/canva-bg.png?v=5',
+  bear: './assets/canva-bear.png?v=5',
+  penguin: './assets/canva-penguin.png?v=5',
 };
 
 const BEAR_CELL_W = 110;
@@ -46,25 +46,19 @@ const PENGUIN_CELL_H = 46;
 const PENGUIN_DRAW_W = 40;
 const PENGUIN_DRAW_H = 46;
 
-// Bridge lantern coordinates in 396×224 space (shifted up with cropped top sky)
-const BRIDGE_LANTERNS = [
-  { x: 20, y: 52 },
-  { x: 376, y: 52 },
-];
+// Bridge lantern / torch coordinates in 396×224 space on new background (MAHbw39IudQ)
+const BRIDGE_LANTERNS = [];
 
-// Cave wall torch coordinates in 396×224 space
+// Cave wall torch coordinates in 396×224 space (left & right cave walls)
 const CAVE_TORCHES = [
-  { x: 33, y: 126 },
-  { x: 318, y: 144 },
-  { x: 364, y: 126 },
+  { x: 26, y: 112 },
+  { x: 370, y: 112 },
 ];
 
-// Glowing cyan crystal clusters in 396×224 space
+// Glowing cyan crystal clusters in 396×224 space (left & right cave walls)
 const CAVE_CRYSTALS = [
-  { x: 55, y: 162 },
-  { x: 32, y: 180 },
-  { x: 350, y: 173 },
-  { x: 376, y: 180 },
+  { x: 34, y: 162 },
+  { x: 362, y: 164 },
 ];
 
 /* ==========================================================================
@@ -179,9 +173,9 @@ function getSlotX(index, total) {
 }
 
 function getTrapdoorWidth(total) {
-  if (total <= 1) return 24;
+  if (total <= 1) return 30;
   const step = (SLOT_R - SLOT_L) / (total - 1);
-  return clamp(Math.floor(step - 7), 18, 24);
+  return clamp(Math.floor(step - 6), 22, 30);
 }
 
 function prefersReducedMotion() {
@@ -1255,18 +1249,12 @@ export class PenguinArena {
   _drawBackgroundAndAtmosphere(ctx, t) {
     const bgImg = this._sprites.bg;
     if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-      // Crop the top 7px of empty dark sky from canva-bg.png (198×112) so the bridge sits higher (BRIDGE_Y = 78),
-      // eliminating wasted air above the penguins and giving the cavern below more room for the large polar bear!
-      const cropTopSy = 7;
-      const bridgeSy = 46;
-      // Top section (sky, moon, mountains, bridge top): sy = 7..46 (39px) -> dy = 0..78 (78px = exact 2x vertical scale!)
-      ctx.drawImage(bgImg, 0, cropTopSy, 198, bridgeSy - cropTopSy, 0, 0, W, 78);
-      // Lower section (bridge deck + cavern + snow floor): sy = 46..112 (66px) -> dy = 78..224 (146px)
-      ctx.drawImage(bgImg, 0, bridgeSy, 198, 112 - bridgeSy, 0, 78, W, H - 78);
+      // Draw the new custom-proportioned Canva background (198×112 -> 396×224 exact 2× integer pixel scale!)
+      ctx.drawImage(bgImg, 0, 0, W, H);
     } else {
       // Instant first-millisecond dark blue fallback before image decode finishes
-      fillRectPx(ctx, 0, 0, W, 78, PAL.skyFallback);
-      fillRectPx(ctx, 0, 78, W, H - 78, PAL.caveGap);
+      fillRectPx(ctx, 0, 0, W, 68, PAL.skyFallback);
+      fillRectPx(ctx, 0, 68, W, H - 68, PAL.caveGap);
     }
 
     // Soft flickering warm golden glow pulses over the 2 bridge lanterns
@@ -1300,41 +1288,68 @@ export class PenguinArena {
     ctx.restore();
   }
 
-  /** @private */
+  /**
+   * Draws all 10 individual penguin hatches (`luker`) along the bridge deck (y = 68..82):
+   * - When CLOSED (`angle <= 2°`): clearly renders each penguin's individual wooden & iron-bound hatch door
+   *   with plank seams, frost top edge, left brass hinge pin, and right latch bolt so every penguin visibly stands on its own hatch!
+   * - When OPEN (`angle > 2°`): cuts a clear dark cavern shaft all the way through the bridge deck (y = 67..84)
+   *   and swings the wooden hatch door downward around its left hinge into the cave below!
+   * @private
+   */
   _drawTrapdoorCutouts(ctx) {
+    const hatchY = BRIDGE_Y; // 68 (top of bridge deck where penguin feet stand)
+    const hatchH = 14;       // 68..82 (full thickness of the bridge deck & wooden beam)
+
     for (let i = 0; i < this._trapdoors.length; i += 1) {
       const d = this._trapdoors[i];
-      if (d.angle <= 5) continue;
+      const hatchW = d.w; // ~28px wide individual hatch per penguin
+      const hatchX = Math.round(d.slotX - hatchW / 2);
 
-      const gapX = Math.round(d.slotX - 12);
-      const gapY = 78;
-      const gapW = 24;
-      const gapH = 9;
+      if (d.angle <= 2) {
+        // CLOSED HATCH: Every penguin clearly stands on its own distinct hinged bridge hatch!
+        // Outer dark iron frame
+        fillRectPx(ctx, hatchX, hatchY, hatchW, hatchH, PAL.outline);
+        // Frost/ice top lip where penguin feet rest
+        fillRectPx(ctx, hatchX + 1, hatchY + 1, hatchW - 2, 2, '#cceeff');
+        fillRectPx(ctx, hatchX + 1, hatchY + 3, hatchW - 2, 1, '#68b5e8');
+        // Warm oak hatch planks inside the frame
+        fillRectPx(ctx, hatchX + 1, hatchY + 4, hatchW - 2, hatchH - 5, PAL.oakMid);
+        fillRectPx(ctx, hatchX + 2, hatchY + 5, hatchW - 4, hatchH - 7, PAL.oakWarm);
+        // Vertical plank dividers inside the hatch
+        const third = Math.floor(hatchW / 3);
+        fillRectPx(ctx, hatchX + third, hatchY + 4, 1, hatchH - 5, PAL.oakDark);
+        fillRectPx(ctx, hatchX + third * 2, hatchY + 4, 1, hatchH - 5, PAL.oakDark);
+        // Left brass hinge & right iron latch bolt
+        fillRectPx(ctx, hatchX + 2, hatchY + 6, 2, 3, '#ffd042');
+        fillRectPx(ctx, hatchX + hatchW - 4, hatchY + 7, 2, 2, PAL.boltHi);
+      } else {
+        // OPEN HATCH: Cut a clear dark cavern shaft all the way through the bridge deck!
+        fillRectPx(ctx, hatchX, hatchY - 1, hatchW, hatchH + 2, '#071b3e');
+        fillRectPx(ctx, hatchX + 2, hatchY - 1, hatchW - 4, hatchH + 2, '#0a2452');
 
-      // Dark cavern gap cut flush inside the timber bridge beam at (slotX - 12, 78)
-      fillRectPx(ctx, gapX, gapY, gapW, gapH, '#122238');
-      fillRectPx(ctx, gapX, gapY, gapW, 1, PAL.oakDark);
+        // Sturdy iron/oak side jambs framing the open shaft
+        fillRectPx(ctx, hatchX - 1, hatchY, 2, hatchH, PAL.outline);
+        fillRectPx(ctx, hatchX, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
+        fillRectPx(ctx, hatchX + hatchW - 1, hatchY, 2, hatchH, PAL.outline);
+        fillRectPx(ctx, hatchX + hatchW - 1, hatchY + 1, 1, hatchH - 2, PAL.oakMid);
 
-      // Wooden plank side borders framing the open trapdoor cutout
-      fillRectPx(ctx, gapX - 1, gapY, 1, gapH, PAL.oakDark);
-      fillRectPx(ctx, gapX + gapW, gapY, 1, gapH, PAL.oakDark);
+        // Swinging wooden hatch door rotating downward (0° -> 88°) into the cavern from left hinge
+        const rad = (d.angle * Math.PI) / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
+        const hx = hatchX + 1;
+        const hy = hatchY + hatchH - 2;
+        const leafLen = hatchW - 2;
 
-      // Swinging wooden trapdoor leaf rotating downward into the cavern
-      const rad = (d.angle * Math.PI) / 180;
-      const cosA = Math.cos(rad);
-      const sinA = Math.sin(rad);
-      const hx = gapX + 1;
-      const hy = gapY + gapH - 1;
-      const leafLen = gapW - 3;
-
-      for (let u = 0; u < leafLen; u += 1) {
-        const px = Math.round(hx + u * cosA);
-        const py = Math.round(hy + u * sinA);
-        fillRectPx(ctx, px - 1, py - 1, 3, 3, PAL.outline);
-        fillRectPx(ctx, px, py, 2, 2, u % 4 === 0 ? PAL.oakMid : PAL.oakWarm);
+        for (let u = 0; u < leafLen; u += 1) {
+          const px = Math.round(hx + u * cosA);
+          const py = Math.round(hy + u * sinA);
+          fillRectPx(ctx, px - 2, py - 1, 4, 3, PAL.outline);
+          fillRectPx(ctx, px - 1, py, 2, 2, u % 5 === 0 ? PAL.oakDark : PAL.oakWarm);
+        }
+        // Brass hinge pin at pivot point
+        fillRectPx(ctx, hx, hy - 1, 2, 2, '#ffd042');
       }
-      // Iron hinge bolt
-      fillRectPx(ctx, hx, hy - 1, 1, 1, PAL.boltHi);
     }
   }
 
