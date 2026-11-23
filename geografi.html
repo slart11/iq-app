@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trøndelag Kartquiz · IQ-app</title>
+  <meta name="description" content="Finn kommunene i Trøndelag på kartet.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: "#ffffff",
+            foreground: "#0f172a",
+            "muted-foreground": "#475569",
+            secondary: "#f1f5f9",
+            border: "#e2e8f0",
+            primary: "#0f172a",
+            "primary-foreground": "#ffffff",
+            destructive: "#b91c1c",
+            "destructive-foreground": "#ffffff"
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    #quiz-map { background: #f8fafc; }
+    button:disabled { opacity: .5; }
+    @keyframes shake {
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .animate-shake { animation: shake .35s ease-in-out; }
+    }
+  </style>
+  <script defer src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script defer src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="./kartquiz.js"></script>
+</head>
+<body>
+  <div id="quiz">
+    <p class="p-4"><a class="underline" href="./">← Forside</a> · Laster kartquizen …</p>
+  </div>
+  <noscript>Du må slå på JavaScript for å spille kartquizen.</noscript>
+</body>
+</html>
