@@ -340,7 +340,13 @@ function ensureArenaStyles() {
 export class PenguinArena {
   /**
    * @param {HTMLElement} container
-   * @param {{ totalPenguins?: number }} [options]
+   * @param {{
+   *   totalPenguins?: number,
+   *   onTrapdoorOpen?: () => void,
+   *   onPenguinFall?: () => void,
+   *   onPenguinLand?: () => void,
+   *   onBearChomp?: () => void,
+   * }} [options]
    */
   constructor(container, options = {}) {
     if (!container) {
@@ -351,6 +357,12 @@ export class PenguinArena {
 
     this._container = container;
     this._initialTotal = options.totalPenguins ?? 10;
+    this._callbacks = {
+      onTrapdoorOpen: typeof options.onTrapdoorOpen === 'function' ? options.onTrapdoorOpen : null,
+      onPenguinFall: typeof options.onPenguinFall === 'function' ? options.onPenguinFall : null,
+      onPenguinLand: typeof options.onPenguinLand === 'function' ? options.onPenguinLand : null,
+      onBearChomp: typeof options.onBearChomp === 'function' ? options.onBearChomp : null,
+    };
     this._state = createPenguinState(this._initialTotal);
     this._destroyed = false;
     this._rafId = null;
@@ -526,6 +538,8 @@ export class PenguinArena {
       bear.mode = 'chompOpen';
       bear.modeTimer = 0.5;
       this._setBubble('NOM!', 1.0);
+      this._callbacks.onTrapdoorOpen?.();
+      this._callbacks.onBearChomp?.();
       this._render();
 
       this._schedule(() => {
@@ -542,6 +556,7 @@ export class PenguinArena {
     if (door) {
       door.targetAngle = 88;
       this._spawnSnowBurst(targetX, BRIDGE_Y + 2, 8);
+      this._callbacks.onTrapdoorOpen?.();
     }
 
     if (penguin) {
@@ -976,6 +991,7 @@ export class PenguinArena {
           p.status = 'falling';
           p.timer = 0;
           p.vy = 25;
+          this._callbacks.onPenguinFall?.();
         }
       } else if (p.status === 'falling') {
         p.vy += GRAVITY * dt;
@@ -1004,6 +1020,7 @@ export class PenguinArena {
           p.landedTimer = 0;
           this._spawnLandingPuff(p.x, FLOOR_Y);
           this._shakeTimer = Math.max(this._shakeTimer, 0.09);
+          this._callbacks.onPenguinLand?.();
         }
       } else if (p.status === 'landed') {
         p.landedTimer += dt;
@@ -1205,6 +1222,7 @@ export class PenguinArena {
         this._setBubble('NOM!', 1.15);
         this._shakeTimer = 0.22; // 3px camera shake
         this._spawnChompBurst(burstX, FLOOR_Y - 8);
+        this._callbacks.onBearChomp?.();
       }
     } else if (bear.mode === 'chompChew') {
       bear.modeTimer -= dt;

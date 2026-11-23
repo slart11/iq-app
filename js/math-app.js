@@ -96,43 +96,230 @@ const soundEngine = {
     }
   },
 
-  playWrong() {
-    this.vibrate([35, 45, 35]);
+  _noiseBuffer: null,
+
+  _getNoiseBuffer() {
+    if (!this.ctx) return null;
+    if (this._noiseBuffer && this._noiseBuffer.sampleRate === this.ctx.sampleRate) {
+      return this._noiseBuffer;
+    }
+    const length = Math.floor(this.ctx.sampleRate * 0.25);
+    const buffer = this.ctx.createBuffer(1, length, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i += 1) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    this._noiseBuffer = buffer;
+    return buffer;
+  },
+
+  /**
+   * Wooden trapdoor latch & double-leaf clack ("klakk!") when a hatch snaps open.
+   */
+  playTrapdoor() {
     if (this.muted) return;
     this.init();
     if (!this.ctx) return;
     try {
       const now = this.ctx.currentTime + 0.005;
 
-      // 1. Comical descending penguin slide whistle
-      const slideOsc = this.ctx.createOscillator();
-      const slideGain = this.ctx.createGain();
-      slideOsc.type = 'triangle';
-      slideOsc.frequency.setValueAtTime(640, now);
-      slideOsc.frequency.exponentialRampToValueAtTime(170, now + 0.36);
-      slideGain.gain.setValueAtTime(0.11, now);
-      slideGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-      slideOsc.connect(slideGain);
-      slideGain.connect(this.ctx.destination);
-      slideOsc.start(now);
-      slideOsc.stop(now + 0.39);
+      // 1. Metallic iron latch click (sharp high-mid ping)
+      const latchOsc = this.ctx.createOscillator();
+      const latchGain = this.ctx.createGain();
+      latchOsc.type = 'square';
+      latchOsc.frequency.setValueAtTime(1180, now);
+      latchOsc.frequency.exponentialRampToValueAtTime(420, now + 0.025);
+      latchGain.gain.setValueAtTime(0.055, now);
+      latchGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+      latchOsc.connect(latchGain);
+      latchGain.connect(this.ctx.destination);
+      latchOsc.start(now);
+      latchOsc.stop(now + 0.035);
 
-      // 2. Soft polar bear chomp thud
-      const chompTime = now + 0.34;
-      const thudOsc = this.ctx.createOscillator();
-      const thudGain = this.ctx.createGain();
-      thudOsc.type = 'sine';
-      thudOsc.frequency.setValueAtTime(145, chompTime);
-      thudOsc.frequency.exponentialRampToValueAtTime(52, chompTime + 0.16);
-      thudGain.gain.setValueAtTime(0.18, chompTime);
-      thudGain.gain.exponentialRampToValueAtTime(0.0001, chompTime + 0.17);
-      thudOsc.connect(thudGain);
-      thudGain.connect(this.ctx.destination);
-      thudOsc.start(chompTime);
-      thudOsc.stop(chompTime + 0.18);
+      // 2. Hollow wooden trapdoor "klakk!" (bandpass noise burst + woody resonance)
+      const noiseBuf = this._getNoiseBuffer();
+      if (noiseBuf) {
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = noiseBuf;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(520, now + 0.015);
+        filter.Q.setValueAtTime(2.6, now + 0.015);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.24, now + 0.015);
+        nGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(this.ctx.destination);
+        noise.start(now + 0.015);
+        noise.stop(now + 0.11);
+      }
+
+      const woodOsc = this.ctx.createOscillator();
+      const woodGain = this.ctx.createGain();
+      woodOsc.type = 'triangle';
+      woodOsc.frequency.setValueAtTime(260, now + 0.015);
+      woodOsc.frequency.exponentialRampToValueAtTime(95, now + 0.085);
+      woodGain.gain.setValueAtTime(0.16, now + 0.015);
+      woodGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+      woodOsc.connect(woodGain);
+      woodGain.connect(this.ctx.destination);
+      woodOsc.start(now + 0.015);
+      woodOsc.stop(now + 0.1);
     } catch {
       // Audio playback blocked
     }
+  },
+
+  /**
+   * Comical descending slide-whistle as the penguin drops down into the ice cavern.
+   */
+  playPenguinFall() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime + 0.005;
+      const slideOsc = this.ctx.createOscillator();
+      const slideGain = this.ctx.createGain();
+      slideOsc.type = 'sine';
+      slideOsc.frequency.setValueAtTime(860, now);
+      slideOsc.frequency.exponentialRampToValueAtTime(720, now + 0.06);
+      slideOsc.frequency.exponentialRampToValueAtTime(210, now + 0.48);
+
+      // Gentle vibrato for playful cartoon whistle feel
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      lfo.frequency.setValueAtTime(14, now);
+      lfoGain.gain.setValueAtTime(14, now);
+      lfo.connect(lfoGain);
+      lfoGain.connect(slideOsc.frequency);
+
+      slideGain.gain.setValueAtTime(0.001, now);
+      slideGain.gain.linearRampToValueAtTime(0.1, now + 0.03);
+      slideGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+
+      slideOsc.connect(slideGain);
+      slideGain.connect(this.ctx.destination);
+      lfo.start(now);
+      slideOsc.start(now);
+      lfo.stop(now + 0.52);
+      slideOsc.stop(now + 0.52);
+    } catch {
+      // Audio playback blocked
+    }
+  },
+
+  /**
+   * Soft snowy poof when the penguin lands on the cavern snow floor.
+   */
+  playSnowLand() {
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime + 0.005;
+      const noiseBuf = this._getNoiseBuffer();
+      if (noiseBuf) {
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = noiseBuf;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(680, now);
+        filter.frequency.exponentialRampToValueAtTime(160, now + 0.14);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(now);
+        noise.stop(now + 0.16);
+      }
+
+      const thumpOsc = this.ctx.createOscillator();
+      const thumpGain = this.ctx.createGain();
+      thumpOsc.type = 'sine';
+      thumpOsc.frequency.setValueAtTime(125, now);
+      thumpOsc.frequency.exponentialRampToValueAtTime(48, now + 0.1);
+      thumpGain.gain.setValueAtTime(0.14, now);
+      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+      thumpOsc.connect(thumpGain);
+      thumpGain.connect(this.ctx.destination);
+      thumpOsc.start(now);
+      thumpOsc.stop(now + 0.12);
+    } catch {
+      // Audio playback blocked
+    }
+  },
+
+  /**
+   * Playful polar bear double-bite "knask-knask!" when chomping the penguin.
+   */
+  playBearChomp() {
+    this.vibrate([25, 40, 20]);
+    if (this.muted) return;
+    this.init();
+    if (!this.ctx) return;
+    try {
+      const now = this.ctx.currentTime + 0.005;
+      const noiseBuf = this._getNoiseBuffer();
+
+      // Two rhythmic crunch bites ("knask-knask!")
+      const bites = [
+        { offset: 0, pitch: 155, crunchFreq: 1350, vol: 0.24 },
+        { offset: 0.19, pitch: 130, crunchFreq: 1050, vol: 0.18 },
+      ];
+
+      for (const bite of bites) {
+        const t = now + bite.offset;
+
+        // Low jaw snap thud
+        const jawOsc = this.ctx.createOscillator();
+        const jawGain = this.ctx.createGain();
+        jawOsc.type = 'sawtooth';
+        jawOsc.frequency.setValueAtTime(bite.pitch, t);
+        jawOsc.frequency.exponentialRampToValueAtTime(46, t + 0.11);
+        const jawFilter = this.ctx.createBiquadFilter();
+        jawFilter.type = 'lowpass';
+        jawFilter.frequency.setValueAtTime(360, t);
+        jawGain.gain.setValueAtTime(bite.vol, t);
+        jawGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+        jawOsc.connect(jawFilter);
+        jawFilter.connect(jawGain);
+        jawGain.connect(this.ctx.destination);
+        jawOsc.start(t);
+        jawOsc.stop(t + 0.13);
+
+        // Crisp "knask" crunch noise burst
+        if (noiseBuf) {
+          const crunch = this.ctx.createBufferSource();
+          crunch.buffer = noiseBuf;
+          const bp = this.ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(bite.crunchFreq, t);
+          bp.Q.setValueAtTime(1.6, t);
+          const cGain = this.ctx.createGain();
+          cGain.gain.setValueAtTime(bite.vol * 0.9, t);
+          cGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+          crunch.connect(bp);
+          bp.connect(cGain);
+          cGain.connect(this.ctx.destination);
+          crunch.start(t);
+          crunch.stop(t + 0.1);
+        }
+      }
+    } catch {
+      // Audio playback blocked
+    }
+  },
+
+  playWrong() {
+    // Immediate tactile feedback; the synchronized trapdoor clack, penguin fall whistle,
+    // snow landing poof, and bear chomp crunch are triggered directly by PenguinArena events!
+    this.vibrate([30, 35]);
+    if (this.muted) return;
+    this.init();
   },
 
   playComplete() {
@@ -303,7 +490,13 @@ let arena = null;
 function ensureArena(totalPenguins) {
   if (!dom.penguinArenaEl) return null;
   if (!arena) {
-    arena = new PenguinArena(dom.penguinArenaEl, { totalPenguins });
+    arena = new PenguinArena(dom.penguinArenaEl, {
+      totalPenguins,
+      onTrapdoorOpen: () => soundEngine.playTrapdoor(),
+      onPenguinFall: () => soundEngine.playPenguinFall(),
+      onPenguinLand: () => soundEngine.playSnowLand(),
+      onBearChomp: () => soundEngine.playBearChomp(),
+    });
   } else {
     arena.reset(totalPenguins);
   }
