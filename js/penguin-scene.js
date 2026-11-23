@@ -31,20 +31,20 @@ const SLOT_L = 58;
 const SLOT_R = 338;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png',
-  bear: './assets/canva-bear.png',
-  penguin: './assets/canva-penguin.png',
+  bg: './assets/canva-bg.png?v=2',
+  bear: './assets/canva-bear.png?v=2',
+  penguin: './assets/canva-penguin.png?v=2',
 };
 
-const BEAR_CELL_W = 56;
-const BEAR_CELL_H = 44;
-const BEAR_DRAW_W = 84;
-const BEAR_DRAW_H = 66;
+const BEAR_CELL_W = 76;
+const BEAR_CELL_H = 56;
+const BEAR_DRAW_W = 76;
+const BEAR_DRAW_H = 56;
 
-const PENGUIN_CELL_W = 68;
-const PENGUIN_CELL_H = 68;
-const PENGUIN_DRAW_W = 30;
-const PENGUIN_DRAW_H = 30;
+const PENGUIN_CELL_W = 32;
+const PENGUIN_CELL_H = 34;
+const PENGUIN_DRAW_W = 32;
+const PENGUIN_DRAW_H = 34;
 
 // Bridge lantern coordinates in 396×224 space
 const BRIDGE_LANTERNS = [
@@ -1278,38 +1278,35 @@ export class PenguinArena {
       const d = this._trapdoors[i];
       if (d.angle <= 5) continue;
 
-      const gapX = Math.round(d.slotX - 12);
-      const gapY = 88;
-      const gapW = 24;
-      const gapH = 12;
+      const gapX = Math.round(d.slotX - 10);
+      const gapY = 91;
+      const gapW = 20;
+      const gapH = 8;
 
-      // Dark cavern gap cut right through the bridge deck at (slotX - 12, 88)
-      fillRectPx(ctx, gapX, gapY, gapW, gapH, PAL.caveGap);
-      fillRectPx(ctx, gapX, gapY, gapW, 2, PAL.outline);
+      // Dark cavern gap cut flush inside the timber bridge beam at (slotX - 10, 91)
+      fillRectPx(ctx, gapX, gapY, gapW, gapH, '#122238');
+      fillRectPx(ctx, gapX, gapY, gapW, 1, PAL.oakDark);
 
       // Wooden plank side borders framing the open trapdoor cutout
-      fillRectPx(ctx, gapX - 2, gapY, 2, gapH, PAL.oakDark);
-      fillRectPx(ctx, gapX - 1, gapY + 1, 1, gapH - 2, PAL.oakWarm);
-      fillRectPx(ctx, gapX + gapW, gapY, 2, gapH, PAL.oakDark);
-      fillRectPx(ctx, gapX + gapW, gapY + 1, 1, gapH - 2, PAL.oakWarm);
+      fillRectPx(ctx, gapX - 1, gapY, 1, gapH, PAL.oakDark);
+      fillRectPx(ctx, gapX + gapW, gapY, 1, gapH, PAL.oakDark);
 
       // Swinging wooden trapdoor leaf rotating downward into the cavern
       const rad = (d.angle * Math.PI) / 180;
       const cosA = Math.cos(rad);
       const sinA = Math.sin(rad);
-      const hx = gapX + 2;
-      const hy = gapY + gapH - 2;
-      const leafLen = gapW - 4;
+      const hx = gapX + 1;
+      const hy = gapY + gapH - 1;
+      const leafLen = gapW - 3;
 
       for (let u = 0; u < leafLen; u += 1) {
         const px = Math.round(hx + u * cosA);
         const py = Math.round(hy + u * sinA);
-        fillRectPx(ctx, px - 2, py - 2, 5, 5, PAL.outline);
-        fillRectPx(ctx, px - 1, py - 1, 3, 3, u % 4 === 0 ? PAL.oakMid : PAL.oakWarm);
-        fillRectPx(ctx, px - 1, py - 1, 2, 1, PAL.oakHi);
+        fillRectPx(ctx, px - 1, py - 1, 3, 3, PAL.outline);
+        fillRectPx(ctx, px, py, 2, 2, u % 4 === 0 ? PAL.oakMid : PAL.oakWarm);
       }
       // Iron hinge bolt
-      fillRectPx(ctx, hx - 1, hy - 1, 2, 2, PAL.boltHi);
+      fillRectPx(ctx, hx, hy - 1, 1, 1, PAL.boltHi);
     }
   }
 
@@ -1353,7 +1350,7 @@ export class PenguinArena {
         xOffset = Math.floor(t * 30) % 2 === 0 ? -1 : 1;
       } else if (p.status === 'falling') {
         cellIndex = 2;
-        rotAngle = Math.sin(t * 18 + p.phase) * 0.25;
+        xOffset = Math.round(Math.sin(t * 18 + p.phase) * 1.5);
       } else if (p.status === 'landed') {
         cellIndex = 2;
         xOffset = Math.floor(t * 14) % 2 === 0 ? -1 : 0;
@@ -1371,13 +1368,13 @@ export class PenguinArena {
 
       if (pImg && pImg.complete && pImg.naturalWidth > 0) {
         const sx = cellIndex * PENGUIN_CELL_W;
+        const flipDir = p.status === 'falling'
+          ? (Math.floor(t * 10 + i) % 2 === 0 ? 1 : -1)
+          : p.facingDir;
         ctx.save();
-        // Anchor at penguin center-bottom (feet at y = 66 in 68×68 cell => +1px below drawY)
-        ctx.translate(drawX, drawY - Math.round(PENGUIN_DRAW_H / 2) + 1);
-        if (rotAngle !== 0) {
-          ctx.rotate(rotAngle);
-        }
-        if (p.facingDir < 0 && p.status !== 'falling') {
+        // Exact 1:1 integer pixel placement (zero fractional rotation shearing!)
+        ctx.translate(drawX, drawY + 2 - PENGUIN_DRAW_H);
+        if (flipDir < 0) {
           ctx.scale(-1, 1);
         }
         ctx.drawImage(
@@ -1387,7 +1384,7 @@ export class PenguinArena {
           PENGUIN_CELL_W,
           PENGUIN_CELL_H,
           -Math.round(PENGUIN_DRAW_W / 2),
-          -Math.round(PENGUIN_DRAW_H / 2),
+          0,
           PENGUIN_DRAW_W,
           PENGUIN_DRAW_H
         );
