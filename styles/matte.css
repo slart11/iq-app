@@ -733,7 +733,7 @@
 }
 
 .answer-wrap {
-  margin-bottom: 0.625rem;
+  margin-bottom: 0.35rem;
 }
 
 .answer-input {
@@ -771,18 +771,24 @@
 
 /* Dedicated Inline Feedback Banner */
 .feedback-banner {
-  min-height: 2.75rem;
+  min-height: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 0.45rem 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  margin-bottom: 0.35rem;
   border-radius: var(--radius-md);
   font-size: 0.9375rem;
   font-weight: 700;
   border: 1px solid transparent;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.feedback-banner:empty {
+  min-height: 0.35rem;
+  padding: 0;
+  margin-bottom: 0.25rem;
 }
 
 .feedback-banner.is-correct {
