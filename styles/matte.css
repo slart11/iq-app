@@ -733,7 +733,7 @@
 }
 
 .answer-wrap {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.65rem;
 }
 
 .answer-input {
@@ -786,9 +786,7 @@
 }
 
 .feedback-banner:empty {
-  min-height: 0.35rem;
-  padding: 0;
-  margin-bottom: 0.25rem;
+  display: none;
 }
 
 .feedback-banner.is-correct {

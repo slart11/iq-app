@@ -1083,20 +1083,13 @@ function handleSubmission({ isTimeout = false }) {
     if (arena) arena.onCorrectAnswer();
 
     dom.answerInput.classList.add('is-correct');
-    dom.feedbackBanner.classList.add('is-correct');
-    dom.feedbackBanner.textContent = 'Riktig! Pingvinene jubler!';
   } else {
     state.streak = 0;
     soundEngine.playWrong();
     if (arena) arena.onWrongAnswer();
 
+    dom.answerInput.value = String(problem.ans);
     dom.answerInput.classList.add('is-wrong', 'iq-shake');
-    dom.feedbackBanner.classList.add('is-wrong');
-    if (graded.isTimeout) {
-      dom.feedbackBanner.textContent = `Tiden gikk ut – riktig svar er ${problem.ans}. En pingvin falt ned til isbjørnen!`;
-    } else {
-      dom.feedbackBanner.textContent = `Feil – riktig svar er ${problem.ans} (du svarte ${rawInput}). En pingvin falt ned til isbjørnen!`;
-    }
   }
 
   updateHud();
