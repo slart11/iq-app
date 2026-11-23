@@ -650,7 +650,7 @@ function startRound({ practiceQueue = null } = {}) {
   dom.practiceBadge.hidden = !isPractice;
   dom.timerWrap.hidden = state.untimed;
 
-  ensureArena(state.roundTotal);
+  ensureArena(10); // Always start with all 10 penguins aligned on the 10 bridge hatches
   updateHud();
   loadNextQuestion();
 }
