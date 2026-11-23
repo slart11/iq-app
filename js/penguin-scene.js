@@ -27,6 +27,10 @@ const BEAR_FLOOR_Y = 214; // Polar bear paw contact level planted firmly on the 
 const GRAVITY = 520; // px/s² in 396×224 space
 const BEAR_HOME_X = 104;
 const BEAR_SPEED = 240; // px/s gallop sprint speed across the snow floor
+const BEAR_BACK_SPEED = 175; // px/s step-back speed when penguin lands too close to bear's body
+const BEAR_CHOMP_DIST = 44; // ideal distance from bear center to penguin so penguin sits right at open jaws (Cell 3)
+const BEAR_MIN_X = 48;
+const BEAR_MAX_X = W - 48;
 const SLOT_L = 34;
 const SLOT_R = 362;
 
@@ -1102,16 +1106,29 @@ export class PenguinArena {
         bear.targetX = airborne.x;
       }
     } else if (bear.mode === 'watch') {
-      // Watches falling penguin; starts galloping ONLY AFTER penguin lands on the snow floor at y = 194!
+      // Watches falling penguin; if the bear is standing directly under/too close to where the penguin
+      // is falling, it backs up smoothly to BEAR_CHOMP_DIST so the penguin lands right in front of its mouth!
       const focus = landed || airborne;
       if (!focus) {
         bear.mode = 'wait';
       } else {
         bear.targetIndex = focus.index;
         bear.targetX = focus.x;
-        if (Math.abs(focus.x - bear.x) > 6) {
-          bear.dir = focus.x >= bear.x ? 1 : -1;
+        const preferredDir = Math.abs(focus.x - bear.x) > 4 ? (focus.x >= bear.x ? 1 : -1) : bear.dir;
+        const idealX = this._getIdealBearChompX(focus.x, preferredDir);
+        bear.dir = focus.x >= idealX ? 1 : -1;
+
+        const distFromFocus = Math.abs(focus.x - bear.x);
+        if (distFromFocus < BEAR_CHOMP_DIST - 4) {
+          // Back up smoothly while watching the falling penguin
+          const delta = idealX - bear.x;
+          if (Math.abs(delta) > 2) {
+            const step = Math.min(Math.abs(delta), BEAR_BACK_SPEED * dt);
+            bear.x = clamp(bear.x + Math.sign(delta) * step, BEAR_MIN_X, BEAR_MAX_X);
+            bear.runTime += dt;
+          }
         }
+
         if (landed && landed.landedTimer >= 0.08) {
           this._beginBearSprint(landed);
         }
@@ -1122,16 +1139,29 @@ export class PenguinArena {
         bear.mode = 'wait';
         return;
       }
-      const stopDist = 38;
-      const dx = target.x - bear.x;
-      const dist = Math.abs(dx);
-      bear.dir = dx >= 0 ? 1 : -1;
+      if (Math.abs(target.x - bear.x) <= 2) {
+        // Already at exact x; keep current facing unless wall forces the other side
+        const canBackLeft = target.x - BEAR_CHOMP_DIST >= BEAR_MIN_X;
+        const canBackRight = target.x + BEAR_CHOMP_DIST <= BEAR_MAX_X;
+        if (bear.dir === 1 && !canBackLeft && canBackRight) bear.dir = -1;
+        else if (bear.dir === -1 && !canBackRight && canBackLeft) bear.dir = 1;
+      }
+
+      const idealX = this._getIdealBearChompX(target.x, bear.dir);
+      const deltaToIdeal = idealX - bear.x;
+      const distToIdeal = Math.abs(deltaToIdeal);
+      const isBackingUp = (deltaToIdeal * bear.dir) < 0;
+
+      // Keep facing the penguin while either galloping forward OR backing up!
+      if (Math.abs(target.x - bear.x) > 4) {
+        bear.dir = target.x >= bear.x ? 1 : -1;
+      }
       bear.runTime += dt;
 
       bear.dustTimer -= dt;
       if (bear.dustTimer <= 0) {
-        this._spawnSnowBurst(bear.x - bear.dir * 22, BEAR_FLOOR_Y, 5);
-        bear.dustTimer = 0.08;
+        this._spawnSnowBurst(bear.x - bear.dir * 22, BEAR_FLOOR_Y, isBackingUp ? 3 : 5);
+        bear.dustTimer = isBackingUp ? 0.11 : 0.08;
       }
 
       bear.pawprintCooldown -= dt;
@@ -1148,14 +1178,17 @@ export class PenguinArena {
         bear.pawprintCooldown = 0.095;
       }
 
-      if (dist <= stopDist) {
-        // Lunge with wide-open jaws (Cell 3) over the penguin!
+      if (distToIdeal <= 3) {
+        bear.x = idealX;
+        bear.dir = target.x >= bear.x ? 1 : -1;
+        // Lunge with wide-open jaws (Cell 3) right over the penguin!
         bear.mode = 'chompOpen';
-        bear.modeTimer = 0.16;
+        bear.modeTimer = 0.18;
         bear.targetIndex = target.index;
       } else {
-        const step = Math.min(dist - stopDist + 1, BEAR_SPEED * dt);
-        bear.x = clamp(bear.x + bear.dir * step, 44, W - 44);
+        const moveSpeed = isBackingUp ? BEAR_BACK_SPEED : BEAR_SPEED;
+        const step = Math.min(distToIdeal, moveSpeed * dt);
+        bear.x = clamp(bear.x + Math.sign(deltaToIdeal) * step, BEAR_MIN_X, BEAR_MAX_X);
       }
     } else if (bear.mode === 'chompOpen') {
       bear.modeTimer -= dt;
@@ -1200,13 +1233,40 @@ export class PenguinArena {
     }
   }
 
+  /**
+   * Computes the ideal bear center X so the penguin sits directly in front of the bear's open jaws (Cell 3).
+   * If backing up on the current side would hit the cave wall, flips to the opposite side where there is room.
+   * @private
+   */
+  _getIdealBearChompX(targetX, preferredDir) {
+    const leftSideX = targetX - BEAR_CHOMP_DIST; // bear stands to the left, facing right (dir = +1)
+    const rightSideX = targetX + BEAR_CHOMP_DIST; // bear stands to the right, facing left (dir = -1)
+    const leftFits = leftSideX >= BEAR_MIN_X;
+    const rightFits = rightSideX <= BEAR_MAX_X;
+
+    if (preferredDir >= 0) {
+      if (leftFits) return leftSideX;
+      if (rightFits) return rightSideX;
+      return clamp(leftSideX, BEAR_MIN_X, BEAR_MAX_X);
+    }
+    if (rightFits) return rightSideX;
+    if (leftFits) return leftSideX;
+    return clamp(rightSideX, BEAR_MIN_X, BEAR_MAX_X);
+  }
+
   /** @private */
   _beginBearSprint(target) {
     const bear = this._bear;
     bear.mode = 'sprint';
     bear.targetIndex = target.index;
     bear.targetX = target.x;
-    bear.dir = target.x >= bear.x ? 1 : -1;
+
+    // Choose the side that has room to position the penguin right at the bear's mouth
+    const dx = target.x - bear.x;
+    let preferredDir = Math.abs(dx) > 4 ? (dx >= 0 ? 1 : -1) : bear.dir;
+    const idealOnPreferred = this._getIdealBearChompX(target.x, preferredDir);
+    bear.dir = target.x >= idealOnPreferred ? 1 : -1;
+
     bear.runTime = 0;
     bear.bubbleText = null;
     bear.dustTimer = 0;
