@@ -370,7 +370,6 @@ function sanitizeSettings(raw) {
   }
   return {
     opConfigs,
-    untimed: Boolean(raw && typeof raw === 'object' && raw.untimed),
     muted: Boolean(raw && typeof raw === 'object' && raw.muted),
   };
 }
@@ -383,7 +382,6 @@ function loadSettings() {
 function saveSettings() {
   saveJson(STORAGE_KEYS.MATH_SETTINGS, {
     opConfigs: state.opConfigs,
-    untimed: state.untimed,
     muted: state.muted,
   });
 }
@@ -405,7 +403,6 @@ const initialSettings = loadSettings();
 const state = {
   view: 'setup', // 'setup' | 'game' | 'results'
   opConfigs: initialSettings.opConfigs,
-  untimed: initialSettings.untimed,
   muted: initialSettings.muted,
   attempts: loadAttempts(),
   chartMode: 'attempts', // 'attempts' | 'weekly'
@@ -447,7 +444,6 @@ const dom = {
 
   setupView: document.getElementById('math-setup'),
   opConfigGrid: document.getElementById('op-config-grid'),
-  untimedToggle: document.getElementById('untimed-toggle'),
   setupError: document.getElementById('setup-error'),
   startBtn: document.getElementById('start-btn'),
   setupBests: document.getElementById('setup-bests'),
@@ -578,6 +574,12 @@ function setView(nextView) {
 /* ==========================================================================
    Setup View Rendering
    ========================================================================== */
+const DIFFICULTY_PIPS = {
+  single: '+',
+  double: '++',
+  triple: '+++',
+};
+
 function buildOpConfigGrid() {
   dom.opConfigGrid.replaceChildren();
 
@@ -595,12 +597,14 @@ function buildOpConfigGrid() {
     diffGroup.setAttribute('aria-label', OP_LABELS[op]);
 
     for (const diff of DIFFICULTIES) {
-      const btn = el('button', `diff-btn diff-${diff}`, DIFFICULTY_LABELS[diff]);
+      const pipLabel = DIFFICULTY_PIPS[diff] || DIFFICULTY_LABELS[diff];
+      const btn = el('button', `diff-btn diff-${diff}`, pipLabel);
       btn.type = 'button';
       btn.dataset.op = op;
       btn.dataset.diff = diff;
-      btn.setAttribute('aria-label', `${OP_LABELS[op]} – ${DIFFICULTY_LABELS[diff]}`);
+      btn.setAttribute('aria-label', `${OP_LABELS[op]} – ${DIFFICULTY_LABELS[diff]} (${pipLabel})`);
       btn.setAttribute('aria-pressed', 'false');
+      btn.title = `${OP_LABELS[op]} – ${DIFFICULTY_LABELS[diff]}`;
       btn.addEventListener('click', () => {
         toggleOpDifficulty(op, diff);
       });
@@ -762,6 +766,13 @@ function renderHistoryChart(container, showEmptyEncourage = false) {
 
   for (const pt of points) {
     const col = el('div', 'bar-col');
+    if (pt.pct >= 100) {
+      const crown = document.createElement('img');
+      crown.src = './assets/crown-10-10.png';
+      crown.alt = '10/10 krone';
+      crown.className = 'score-crown-mini';
+      col.appendChild(crown);
+    }
     const valEl = el('span', 'bar-value', pt.displayValue);
     const track = el('div', 'bar-track');
 
@@ -841,7 +852,7 @@ function startRound({ practiceQueue = null } = {}) {
 
   setView('game');
   dom.practiceBadge.hidden = !isPractice;
-  dom.timerWrap.hidden = state.untimed;
+  dom.timerWrap.hidden = false;
 
   ensureArena(10); // Always start with all 10 penguins aligned on the 10 bridge hatches
   updateHud();
@@ -909,10 +920,7 @@ function loadNextQuestion() {
   state.timerDeadlineMs = now + state.questionTimeLimitMs;
 
   updateTimerVisual(state.questionTimeLimitMs, state.questionTimeLimitMs);
-
-  if (!state.untimed) {
-    startTimerLoop(state.sessionId);
-  }
+  startTimerLoop(state.sessionId);
 }
 
 /* ==========================================================================
@@ -942,8 +950,7 @@ function startTimerLoop(activeSessionId) {
       state.view !== 'game' ||
       state.sessionId !== activeSessionId ||
       state.isProcessing ||
-      state.isPaused ||
-      state.untimed
+      state.isPaused
     ) {
       state.timerRafId = null;
       return;
@@ -1004,9 +1011,7 @@ function togglePause(forcePaused) {
     }
     state.timerDeadlineMs = now + state.remainingMsWhenPaused;
     updatePauseUI();
-    if (!state.untimed) {
-      startTimerLoop(state.sessionId);
-    }
+    startTimerLoop(state.sessionId);
   }
 }
 
@@ -1148,13 +1153,21 @@ function finishRound() {
 
   // Top stats cards
   dom.resultsStats.replaceChildren();
+  const isPerfectScore = stats.total > 0 && stats.score === stats.total;
   const statItems = [
-    { label: 'Poengsum', value: `${stats.score} / ${stats.total}` },
-    { label: 'Treffsikkerhet', value: `${stats.accuracy} %` },
-    { label: 'Snittid', value: formatSeconds(stats.avgTimeMs) },
+    { label: 'Poengsum', value: `${stats.score} / ${stats.total}`, crown: isPerfectScore },
+    { label: 'Treffsikkerhet', value: `${stats.accuracy} %`, crown: false },
+    { label: 'Snittid', value: formatSeconds(stats.avgTimeMs), crown: false },
   ];
   for (const item of statItems) {
-    const card = el('div', 'stat-card');
+    const card = el('div', item.crown ? 'stat-card stat-card-crowned' : 'stat-card');
+    if (item.crown) {
+      const crown = document.createElement('img');
+      crown.src = './assets/crown-10-10.png';
+      crown.alt = 'Gullkrone for full pott';
+      crown.className = 'score-crown-img';
+      card.appendChild(crown);
+    }
     card.append(
       el('span', 'stat-value', item.value),
       el('span', 'stat-label', item.label),
@@ -1222,12 +1235,6 @@ function bindEvents() {
   window.addEventListener('keydown', unlock, { once: true });
 
   dom.audioToggleBtn.addEventListener('click', toggleAudio);
-
-  dom.untimedToggle.checked = state.untimed;
-  dom.untimedToggle.addEventListener('change', () => {
-    state.untimed = dom.untimedToggle.checked;
-    saveSettings();
-  });
 
   dom.startBtn.addEventListener('click', () => startRound());
 

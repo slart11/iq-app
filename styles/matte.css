@@ -860,11 +860,37 @@
 }
 
 .stat-card {
+  position: relative;
   background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 0.875rem 0.625rem;
   text-align: center;
+}
+
+.stat-card-crowned {
+  background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #f59e0b;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.22);
+}
+
+.score-crown-img {
+  display: block;
+  width: 44px;
+  height: 33px;
+  margin: -1.65rem auto 0.25rem;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  filter: drop-shadow(0 3px 4px rgba(146, 64, 14, 0.28));
+}
+
+.score-crown-mini {
+  display: block;
+  width: 24px;
+  height: 18px;
+  margin: 0 auto 0.1rem;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .stat-value {
