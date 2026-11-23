@@ -826,22 +826,21 @@ export class PenguinArena {
     // Exact mouth/snout coordinates on the 76×56 Cell 0 bear sprite
     const mouthX = b.x + b.dir * 27;
     const mouthY = BEAR_FLOOR_Y - 42;
-    const count = heavy ? 5 : 3;
+    const count = heavy ? 2 : 1;
     for (let i = 0; i < count; i += 1) {
-      const spread = (Math.random() - 0.45) * 6;
-      const speed = (heavy ? 18 : 11) + i * 4 + Math.random() * 6;
+      const spread = (Math.random() - 0.5) * 3;
+      const speed = (heavy ? 9 : 5.5) + i * 2.5 + Math.random() * 3.5;
       this._addParticle({
         kind: 'frostBreath',
-        x: mouthX + b.dir * (i * 2),
-        y: mouthY + spread * 0.25,
+        x: mouthX + b.dir * (i * 1.5),
+        y: mouthY + spread * 0.2,
         vx: b.dir * speed,
-        vy: -4 - i * 1.6 + spread * 0.6,
-        g: -7, // cold vapour curls gently upward as it slows
-        r0: heavy ? 2.0 : 1.5,
-        r1: (heavy ? 6.5 : 5.0) + Math.random() * 1.5,
-        life: (heavy ? 0.95 : 0.85) + Math.random() * 0.2,
-        max: heavy ? 1.05 : 0.95,
-        hasCrystal: i % 2 === 0,
+        vy: -2.2 - i * 0.9 + spread * 0.4,
+        g: -3.8, // gentle upward curl
+        r0: 1.0,
+        r1: (heavy ? 3.4 : 2.5) + Math.random() * 0.8,
+        life: (heavy ? 0.72 : 0.62) + Math.random() * 0.12,
+        max: heavy ? 0.82 : 0.72,
       });
     }
   }
@@ -1052,14 +1051,14 @@ export class PenguinArena {
       bear.breathCycleTime = (bear.breathCycleTime + dt) % cycleDuration;
       bear.breathPhase = bear.breathCycleTime / cycleDuration;
 
-      // Exhale window (0.42 -> 0.70 of cycle): chest compresses while icy frost stream puffs from mouth!
-      const inExhaleWindow = bear.breathPhase >= 0.42 && bear.breathPhase <= 0.70;
+      // Exhale window (0.42 -> 0.66 of cycle): chest compresses while a subtle wisp of frost breath drifts out
+      const inExhaleWindow = bear.breathPhase >= 0.42 && bear.breathPhase <= 0.66;
       if (inExhaleWindow) {
         bear.isExhaling = true;
         bear.breathStreamTimer -= dt;
         if (bear.breathStreamTimer <= 0) {
           this._spawnBreath(bear.mode === 'watch');
-          bear.breathStreamTimer = 0.085; // continuous stream of frost puffs during exhale!
+          bear.breathStreamTimer = 0.13; // delicate, spaced-out wisps during exhale
         }
       } else {
         bear.isExhaling = false;
@@ -1415,20 +1414,6 @@ export class PenguinArena {
         // Minimal fallback silhouette if image is still decoding
         fillRectPx(ctx, drawX - 6, drawY - 22, 12, 22, PAL.pNavyLo);
       }
-
-      // Bouncing red/gold pixel "!" alert badge above panicking or landed penguin
-      if (p.status === 'panic' || (p.status === 'landed' && Math.floor(t * 7) % 2 === 0)) {
-        const bounce = Math.round(Math.sin(t * 22) * 1.5);
-        drawSpeechBubble(
-          ctx,
-          '!',
-          drawX,
-          drawY - PENGUIN_DRAW_H - 4 + bounce,
-          PAL.fireCore,
-          PAL.fireOrange,
-          PAL.outline
-        );
-      }
     }
   }
 
@@ -1523,12 +1508,6 @@ export class PenguinArena {
           sx, 0, BEAR_CELL_W, 19,
           -halfW + headForwardX, headLiftY, BEAR_DRAW_W, 19
         );
-
-        // Subtle icy cyan-white frost glow at the mouth opening during active exhale!
-        if (b.isExhaling) {
-          fillRectPx(ctx, 25 + headForwardX, 11 + headLiftY, 2, 2, '#d8f8ff');
-          fillRectPx(ctx, 27 + headForwardX, 10 + headLiftY, 2, 2, '#8ce8ff');
-        }
       } else {
         ctx.drawImage(
           bImg,
@@ -1587,19 +1566,15 @@ export class PenguinArena {
           fillRectPx(ctx, x, y - 1, 1, 3, pt.color);
         }
       } else if (pt.kind === 'frostBreath') {
-        // Multi-layered icy breath cloud expanding, curling upward, and fading with ice crystal sparkles
+        // Subtle, delicate wisp of cold breath fading softly into the cavern air
         const age = 1 - pt.life / pt.max; // 0 (at mouth) -> 1 (dissipated)
-        const r = Math.max(1, Math.round(pt.r0 + (pt.r1 - pt.r0) * Math.pow(age, 0.7)));
-        const alpha = age < 0.15 ? age / 0.15 : Math.max(0, (1 - age) / 0.85);
+        const r = Math.max(1, Math.round(pt.r0 + (pt.r1 - pt.r0) * Math.pow(age, 0.75)));
+        const alpha = age < 0.2 ? age / 0.2 : Math.max(0, Math.pow((1 - age) / 0.8, 1.3));
         ctx.save();
-        ctx.globalAlpha = alpha * 0.55;
-        fillEllipsePx(ctx, x, y, r, Math.max(1, Math.round(r * 0.75)), '#7ad8ff');
-        ctx.globalAlpha = alpha * 0.82;
-        fillEllipsePx(ctx, x - Math.sign(pt.vx || 1), y, Math.max(1, Math.round(r * 0.6)), Math.max(1, Math.round(r * 0.48)), '#e6fbff');
-        if (pt.hasCrystal && age > 0.18 && age < 0.78) {
-          ctx.globalAlpha = alpha * 0.95;
-          fillRectPx(ctx, x, y - 1, 1, 1, '#ffffff');
-        }
+        ctx.globalAlpha = alpha * 0.16;
+        fillEllipsePx(ctx, x, y, r, Math.max(1, Math.round(r * 0.7)), '#9ad9f5');
+        ctx.globalAlpha = alpha * 0.24;
+        fillEllipsePx(ctx, x - Math.sign(pt.vx || 1), y, Math.max(1, Math.round(r * 0.55)), Math.max(1, Math.round(r * 0.45)), '#e4f7ff');
         ctx.restore();
       } else if (pt.kind === 'puff') {
         const r = Math.max(1, Math.round(pt.r * (pt.life / pt.max)));
@@ -1609,19 +1584,7 @@ export class PenguinArena {
   }
 
   /** @private */
-  _drawBearSpeechBubble(ctx) {
-    const b = this._bear;
-    if (!b.bubbleText) return;
-    const bx = clamp(Math.round(b.x + b.dir * 26), 30, W - 30);
-    const by = BEAR_FLOOR_Y - BEAR_DRAW_H - 4;
-    drawSpeechBubble(
-      ctx,
-      b.bubbleText,
-      bx,
-      by,
-      PAL.fireCore,
-      PAL.fireOrange,
-      PAL.outline
-    );
+  _drawBearSpeechBubble() {
+    // Speech bubbles disabled for clean, pure visual animation
   }
 }
