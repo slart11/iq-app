@@ -10,62 +10,119 @@
     body {
       display: grid;
       place-items: center;
-      padding: clamp(1.25rem, 4vw, 2.5rem);
+      padding: clamp(1rem, 3.5vw, 2.25rem);
+      background:
+        radial-gradient(circle at 20% 10%, #e0f2fe 0%, transparent 45%),
+        radial-gradient(circle at 85% 90%, #dcfce7 0%, transparent 45%),
+        #f1f5f9;
     }
 
     main {
-      width: min(100%, 52rem);
+      width: min(100%, 46rem);
     }
 
-    .hero {
-      margin-bottom: 1.75rem;
+    /* Main 16-bit Pixel Container matching matte.html */
+    .home-card {
+      background: var(--surface);
+      border: 3px solid #141020;
+      border-radius: 10px;
+      box-shadow: 0 7px 0 #141020;
+      overflow: hidden;
+    }
+
+    /* Arctic 16-bit Hero Banner */
+    .hero-banner {
+      position: relative;
+      padding: clamp(1.4rem, 4vw, 2rem) clamp(1.25rem, 4vw, 2rem);
+      background:
+        linear-gradient(180deg, rgba(12, 25, 56, 0.72) 0%, rgba(12, 25, 56, 0.88) 100%),
+        url('./assets/canva-bg.png?v=10') center 28% / cover no-repeat;
+      image-rendering: pixelated;
+      border-bottom: 3px solid #141020;
+      text-align: center;
+      color: #ffffff;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.7rem;
+      margin-bottom: 0.65rem;
+      border-radius: 6px;
+      background: #facc15;
+      color: #141020;
+      border: 2px solid #141020;
+      box-shadow: inset 0 2px 0 #fef08a, 0 3px 0 #141020;
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
 
     h1 {
-      margin: 0 0 0.5rem;
-      font-size: clamp(2.5rem, 7vw, 4.25rem);
-      letter-spacing: -0.055em;
-      line-height: 1.05;
-      color: var(--ink);
+      margin: 0 0 0.4rem;
+      font-size: clamp(2.1rem, 6vw, 3rem);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      line-height: 1.08;
+      color: #ffffff;
+      text-shadow: 3px 3px 0 #141020;
     }
 
     .lead {
-      margin: 0;
-      font-size: clamp(1rem, 2.2vw, 1.125rem);
+      margin: 0 auto;
+      font-size: clamp(0.95rem, 2.2vw, 1.05rem);
+      font-weight: 600;
+      color: #e0f2fe;
+      max-width: 34rem;
+      text-shadow: 1px 2px 0 rgba(20, 16, 32, 0.85);
+    }
+
+    /* Subject Grid */
+    .home-body {
+      padding: clamp(1.25rem, 3.5vw, 1.75rem);
+    }
+
+    .section-caption {
+      margin: 0 0 0.9rem;
+      font-size: 0.8rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       color: var(--ink-muted);
-      max-width: 38rem;
+      text-align: center;
     }
 
     .subject-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1.125rem;
+      gap: 1rem;
     }
 
     .tile {
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      min-height: 15.5rem;
-      min-width: 44px;
-      gap: 1.25rem;
-      padding: 1.625rem;
-      border-radius: 10px;
+      gap: 1rem;
+      padding: 1.25rem;
+      border-radius: 8px;
       border: 3px solid #141020;
-      color: #ffffff;
+      color: #141020;
+      background: #ffffff;
       text-decoration: none;
-      box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.3), inset 0 -6px 0 rgba(0, 0, 0, 0.25), 0 6px 0 #141020;
-      transition: background-color 0.12s ease, transform 0.06s steps(2), box-shadow 0.06s steps(2);
+      box-shadow: inset 0 -5px 0 #e2e8f0, 0 5px 0 #141020;
+      transition: transform 0.06s steps(2), box-shadow 0.06s steps(2), background-color 0.12s ease;
     }
 
     .tile:hover {
       transform: translateY(-2px);
-      box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.35), inset 0 -6px 0 rgba(0, 0, 0, 0.25), 0 8px 0 #141020;
+      box-shadow: inset 0 -5px 0 #cbd5e1, 0 7px 0 #141020;
     }
 
     .tile:active {
-      transform: translateY(4px);
-      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.2), 0 2px 0 #141020;
+      transform: translateY(3px);
+      box-shadow: inset 0 -2px 0 #cbd5e1, 0 2px 0 #141020;
     }
 
     .tile:focus-visible {
@@ -74,125 +131,230 @@
     }
 
     .tile-math {
-      background: var(--math);
+      background: #f0fdfa;
+      box-shadow: inset 0 -5px 0 #99f6e4, 0 5px 0 #141020;
     }
 
     .tile-math:hover {
-      background: var(--math-hover);
+      background: #ccfbf1;
     }
 
     .tile-geo {
-      background: var(--geo);
+      background: #eff6ff;
+      box-shadow: inset 0 -5px 0 #bfdbfe, 0 5px 0 #141020;
     }
 
     .tile-geo:hover {
-      background: var(--geo-hover);
+      background: #dbeafe;
     }
 
-    .tile-top {
+    /* Visual Sprite / Icon Preview Strip inside each card */
+    .tile-visual {
+      height: 5.75rem;
+      border-radius: 6px;
+      border: 3px solid #141020;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .tile-visual-math {
+      background:
+        linear-gradient(180deg, #0c1938 0%, #173566 65%, #bae6fd 66%, #e0f2fe 100%);
       gap: 0.75rem;
+      padding: 0 0.75rem;
     }
 
-    .icon {
-      font-size: 2rem;
+    .sprite-preview-penguin {
+      width: 40px;
+      height: 46px;
+      background: url('./assets/canva-penguin.png?v=10') 0 0 / 120px 46px no-repeat;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      transform: scale(1.25);
+      transform-origin: center bottom;
+      flex-shrink: 0;
+    }
+
+    .sprite-preview-bear {
+      width: 110px;
+      height: 80px;
+      background: url('./assets/canva-bear.png?v=10') 0 0 / 440px 80px no-repeat;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      transform: scale(0.88);
+      transform-origin: center bottom;
+      flex-shrink: 0;
+    }
+
+    .tile-visual-geo {
+      background: linear-gradient(180deg, #0ea5e9 0%, #2563eb 100%);
+      gap: 0.6rem;
+    }
+
+    .geo-badge-icons {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .pixel-chip-icon {
+      width: 3rem;
+      height: 3rem;
+      border-radius: 6px;
+      border: 3px solid #141020;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.55rem;
+      font-weight: 900;
       line-height: 1;
+      box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.4), inset 0 -4px 0 rgba(0, 0, 0, 0.2), 0 3px 0 #141020;
     }
 
-    .arrow {
-      font-size: 1.5rem;
-      line-height: 1;
-      transition: transform 0.15s ease;
-    }
-
-    .tile:hover .arrow {
-      transform: translate(2px, -2px);
-    }
+    .chip-green { background: #16a34a; color: #fff; }
+    .chip-yellow { background: #facc15; color: #141020; }
+    .chip-sky { background: #38bdf8; color: #fff; }
 
     .tile-body {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0.4rem;
+      flex: 1;
     }
 
     .tile-title {
       display: block;
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
+      font-size: 1.45rem;
+      font-weight: 900;
+      letter-spacing: -0.02em;
       line-height: 1.15;
+      color: #141020;
     }
 
     .tile-description {
       display: block;
-      font-size: 0.975rem;
+      font-size: 0.92rem;
       line-height: 1.45;
-      color: rgba(255, 255, 255, 0.94);
+      color: var(--ink-muted);
+      font-weight: 500;
+    }
+
+    .tile-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+      margin-top: 0.25rem;
     }
 
     .tile-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       align-self: flex-start;
-      margin-top: 0.375rem;
-      padding: 0.3rem 0.7rem;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.34);
-      border: 1px solid rgba(255, 255, 255, 0.28);
-      color: #ffffff;
-      font-size: 0.85rem;
-      font-weight: 600;
-      letter-spacing: 0.01em;
+      padding: 0.28rem 0.65rem;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 2px solid #141020;
+      box-shadow: 0 2px 0 #141020;
+      color: #141020;
+      font-size: 0.82rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
     }
 
     .tile-badge[hidden] {
       display: none;
     }
 
+    .tile-badge-crown {
+      width: 18px;
+      height: 14px;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    .tile-cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      width: 100%;
+      min-height: 44px;
+      padding: 0.5rem 0.9rem;
+      border-radius: 6px;
+      border: 3px solid #141020;
+      font-size: 0.95rem;
+      font-weight: 900;
+      color: #ffffff;
+      text-shadow: 1px 2px 0 #141020;
+      box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35), inset 0 -4px 0 rgba(0, 0, 0, 0.22), 0 3px 0 #141020;
+    }
+
+    .tile-cta-math {
+      background: #0d9488;
+    }
+
+    .tile-cta-geo {
+      background: #2563eb;
+    }
+
     @media (max-width: 38rem) {
       .subject-grid {
         grid-template-columns: 1fr;
-      }
-
-      .tile {
-        min-height: 12.5rem;
-        padding: 1.375rem;
       }
     }
   </style>
 </head>
 <body>
   <main>
-    <header class="hero">
-      <h1>IQ-app</h1>
-      <p class="lead">Velg fag for å trene hoderegning eller utforske Trøndelag på kartet.</p>
-    </header>
+    <div class="home-card">
+      <header class="hero-banner">
+        <span class="hero-eyebrow">Hjernetrim &amp; spill</span>
+        <h1>IQ-app</h1>
+        <p class="lead">Redd pingvinene med rask hoderegning eller utforsk Trøndelags 38 kommuner på kartet.</p>
+      </header>
 
-    <nav class="subject-grid" aria-label="Velg fag">
-      <a class="tile tile-math" href="./matte.html">
-        <span class="tile-top">
-          <span class="icon" aria-hidden="true">±</span>
-          <span class="arrow" aria-hidden="true">↗</span>
-        </span>
-        <span class="tile-body">
-          <strong class="tile-title">Matte</strong>
-          <span class="tile-description">Tren hoderegning og ta pingvin- og isbjørnutfordringen!</span>
-          <span class="tile-badge" id="math-best-badge" hidden></span>
-        </span>
-      </a>
+      <div class="home-body">
+        <p class="section-caption">Velg utfordring</p>
+        <nav class="subject-grid" aria-label="Velg fag">
+          <a class="tile tile-math" href="./matte.html">
+            <span class="tile-visual tile-visual-math" aria-hidden="true">
+              <span class="sprite-preview-penguin"></span>
+              <span class="sprite-preview-bear"></span>
+            </span>
+            <span class="tile-body">
+              <strong class="tile-title">Hoderegning</strong>
+              <span class="tile-description">10 oppgaver på tid — svar riktig før isbjørnen tar pingvinene!</span>
+            </span>
+            <span class="tile-footer">
+              <span class="tile-badge" id="math-best-badge" hidden></span>
+              <span class="tile-cta tile-cta-math">Spill Matte →</span>
+            </span>
+          </a>
 
-      <a class="tile tile-geo" href="./geografi.html">
-        <span class="tile-top">
-          <span class="icon" aria-hidden="true">◎</span>
-          <span class="arrow" aria-hidden="true">↗</span>
-        </span>
-        <span class="tile-body">
-          <strong class="tile-title">Geografi</strong>
-          <span class="tile-description">Trøndelags 38 kommuner med interaktivt kart, hint og fakta.</span>
-          <span class="tile-badge" id="geo-best-badge" hidden></span>
-        </span>
-      </a>
-    </nav>
+          <a class="tile tile-geo" href="./geografi.html">
+            <span class="tile-visual tile-visual-geo" aria-hidden="true">
+              <span class="geo-badge-icons">
+                <span class="pixel-chip-icon chip-green">🗺️</span>
+                <span class="pixel-chip-icon chip-yellow">📍</span>
+                <span class="pixel-chip-icon chip-sky">38</span>
+              </span>
+            </span>
+            <span class="tile-body">
+              <strong class="tile-title">Trøndelag-quiz</strong>
+              <span class="tile-description">Finn alle 38 kommuner på det interaktive kartet med hint og fakta.</span>
+            </span>
+            <span class="tile-footer">
+              <span class="tile-badge" id="geo-best-badge" hidden></span>
+              <span class="tile-cta tile-cta-geo">Spill Geografi →</span>
+            </span>
+          </a>
+        </nav>
+      </div>
+    </div>
   </main>
 
   <script type="module">
@@ -221,7 +383,14 @@
     if (mathBadge && mathAttempts.length > 0) {
       const best = pickBestEntry(mathAttempts);
       const countLabel = mathAttempts.length === 1 ? "1 runde" : `${mathAttempts.length} runder`;
-      mathBadge.textContent = `Beste: ${best.score}/${best.total} · ${countLabel}`;
+      if (best.score === best.total && best.total > 0) {
+        const crown = document.createElement("img");
+        crown.src = "./assets/crown-10-10.png";
+        crown.alt = "";
+        crown.className = "tile-badge-crown";
+        mathBadge.appendChild(crown);
+      }
+      mathBadge.appendChild(document.createTextNode(`Beste: ${best.score}/${best.total} · ${countLabel}`));
       mathBadge.hidden = false;
     }
 
