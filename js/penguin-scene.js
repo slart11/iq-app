@@ -466,25 +466,43 @@ export class PenguinArena {
 
   /**
    * Wrong answer choreography:
-   * 1. Trapdoor under the rightmost remaining penguin swings open, cutting a dark gap in the bridge deck
-   * 2. Penguin panics for 250ms (Cell 2 wide-eyed panic + shaking + `!` alert badge)
-   * 3. Penguin falls with gravity into the torchlit ice cavern, wobbling with trailing feathers
-   * 4. Penguin lands on the snow floor at `y = 194` (`landed` state + snow splash)
+   * 1. A RANDOM safe penguin on the bridge is chosen, and its trapdoor hatch swings open downward
+   * 2. That penguin panics for 250ms (Cell 2 wide-eyed panic + shaking)
+   * 3. Penguin falls with gravity into the torchlit ice cavern
+   * 4. Penguin lands on the snow floor at `FLOOR_Y` (`landed` state + snow splash)
    * 5. ONLY AFTER landing, the polar bear gallops at 240 px/s across the cave floor (alternating Cell 1 & Cell 2 every 95ms)
-   * 6. Bear lunges with wide-open jaws (Cell 3 `chompOpen`), triggering a 3px camera shake, 26+ snow/feather particles & `"NOM!"` badge
+   * 6. Bear lunges with wide-open jaws (Cell 3 `chompOpen`), triggering a 3px camera shake & snow puff burst
    * 7. Bear chews twice (`Cell 0` <-> `Cell 3` in `chompChew`), then waits right where it is (`Cell 0`), facing remaining penguins
    */
   onWrongAnswer() {
     const prevRemaining = this._state.remaining;
     const nextState = dropOnePenguin(this._state);
-    this._state = nextState;
 
     if (nextState.remaining === prevRemaining) {
+      this._state = nextState;
       return { ...this._state };
     }
 
-    const idx = nextState.fallingIndex;
-    const targetX = getSlotX(idx, nextState.total);
+    // Pick a RANDOM penguin among all currently safe penguins on the bridge!
+    const safeCandidates = [];
+    for (let i = 0; i < this._penguins.length; i += 1) {
+      const p = this._penguins[i];
+      if (p && (p.status === 'idle' || p.status === 'cheer')) {
+        safeCandidates.push(i);
+      }
+    }
+
+    const idx = safeCandidates.length > 0
+      ? safeCandidates[Math.floor(Math.random() * safeCandidates.length)]
+      : nextState.fallingIndex;
+
+    this._state = {
+      ...nextState,
+      fallingIndex: idx,
+      bearSlot: idx,
+    };
+
+    const targetX = getSlotX(idx, this._state.total);
     const door = this._trapdoors[idx];
     const penguin = this._penguins[idx];
 
@@ -549,15 +567,17 @@ export class PenguinArena {
     this._state = celebratePenguins(this._state);
     const reduced = prefersReducedMotion();
 
-    for (let i = 0; i < this._state.remaining; i += 1) {
+    let cheerRank = 0;
+    for (let i = 0; i < this._penguins.length; i += 1) {
       const p = this._penguins[i];
       if (!p || (p.status !== 'idle' && p.status !== 'cheer')) continue;
       if (!reduced) {
         p.status = 'cheer';
-        p.cheerDelay = i * 0.035;
+        p.cheerDelay = cheerRank * 0.035;
         p.timer = 0.75;
         this._spawnSparkles(p.x, BRIDGE_Y - 28);
       }
+      cheerRank += 1;
     }
 
     const bear = this._bear;
@@ -636,13 +656,17 @@ export class PenguinArena {
 
   /** @private */
   _aimBearTowardRemaining() {
-    const remaining = this._state.remaining;
-    if (remaining <= 0) return;
     let sum = 0;
-    for (let i = 0; i < remaining; i += 1) {
-      sum += this._penguins[i] ? this._penguins[i].x : 0;
+    let count = 0;
+    for (let i = 0; i < this._penguins.length; i += 1) {
+      const p = this._penguins[i];
+      if (p && (p.status === 'idle' || p.status === 'cheer')) {
+        sum += p.x;
+        count += 1;
+      }
     }
-    const avgX = sum / remaining;
+    if (count <= 0) return;
+    const avgX = sum / count;
     if (Math.abs(avgX - this._bear.x) > 8) {
       this._bear.dir = avgX >= this._bear.x ? 1 : -1;
     }
