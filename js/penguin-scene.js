@@ -31,9 +31,9 @@ const SLOT_L = 34;
 const SLOT_R = 362;
 
 const ASSET_URLS = {
-  bg: './assets/canva-bg.png?v=6',
-  bear: './assets/canva-bear.png?v=6',
-  penguin: './assets/canva-penguin.png?v=6',
+  bg: './assets/canva-bg.png?v=8',
+  bear: './assets/canva-bear.png?v=8',
+  penguin: './assets/canva-penguin.png?v=8',
 };
 
 const BEAR_CELL_W = 110;
