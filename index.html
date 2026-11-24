@@ -148,75 +148,31 @@
       background: #dbeafe;
     }
 
-    /* Visual Sprite / Icon Preview Strip inside each card */
+    /* Visual Artwork Banner inside each card */
     .tile-visual {
-      height: 5.75rem;
+      aspect-ratio: 16 / 9;
+      width: 100%;
       border-radius: 6px;
       border: 3px solid #141020;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: block;
       overflow: hidden;
       position: relative;
+      background: #0c1938;
     }
 
-    .tile-visual-math {
-      background:
-        linear-gradient(180deg, #0c1938 0%, #173566 65%, #bae6fd 66%, #e0f2fe 100%);
-      gap: 0.75rem;
-      padding: 0 0.75rem;
-    }
-
-    .sprite-preview-penguin {
-      width: 40px;
-      height: 46px;
-      background: url('./assets/canva-penguin.png?v=10') 0 0 / 120px 46px no-repeat;
+    .tile-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      transform: scale(1.25);
-      transform-origin: center bottom;
-      flex-shrink: 0;
+      transition: transform 0.2s ease;
     }
 
-    .sprite-preview-bear {
-      width: 110px;
-      height: 80px;
-      background: url('./assets/canva-bear.png?v=10') 0 0 / 440px 80px no-repeat;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-      transform: scale(0.88);
-      transform-origin: center bottom;
-      flex-shrink: 0;
+    .tile:hover .tile-visual img {
+      transform: scale(1.03);
     }
-
-    .tile-visual-geo {
-      background: linear-gradient(180deg, #0ea5e9 0%, #2563eb 100%);
-      gap: 0.6rem;
-    }
-
-    .geo-badge-icons {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.55rem;
-    }
-
-    .pixel-chip-icon {
-      width: 3rem;
-      height: 3rem;
-      border-radius: 6px;
-      border: 3px solid #141020;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.55rem;
-      font-weight: 900;
-      line-height: 1;
-      box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.4), inset 0 -4px 0 rgba(0, 0, 0, 0.2), 0 3px 0 #141020;
-    }
-
-    .chip-green { background: #16a34a; color: #fff; }
-    .chip-yellow { background: #facc15; color: #141020; }
-    .chip-sky { background: #38bdf8; color: #fff; }
 
     .tile-body {
       display: flex;
@@ -321,9 +277,8 @@
         <p class="section-caption">Velg utfordring</p>
         <nav class="subject-grid" aria-label="Velg fag">
           <a class="tile tile-math" href="./matte.html">
-            <span class="tile-visual tile-visual-math" aria-hidden="true">
-              <span class="sprite-preview-penguin"></span>
-              <span class="sprite-preview-bear"></span>
+            <span class="tile-visual" aria-hidden="true">
+              <img src="./assets/card-matte.jpg" alt="" loading="eager" decoding="async">
             </span>
             <span class="tile-body">
               <strong class="tile-title">Hoderegning</strong>
@@ -336,12 +291,8 @@
           </a>
 
           <a class="tile tile-geo" href="./geografi.html">
-            <span class="tile-visual tile-visual-geo" aria-hidden="true">
-              <span class="geo-badge-icons">
-                <span class="pixel-chip-icon chip-green">🗺️</span>
-                <span class="pixel-chip-icon chip-yellow">📍</span>
-                <span class="pixel-chip-icon chip-sky">38</span>
-              </span>
+            <span class="tile-visual" aria-hidden="true">
+              <img src="./assets/card-geografi.jpg" alt="" loading="eager" decoding="async">
             </span>
             <span class="tile-body">
               <strong class="tile-title">Trøndelag-quiz</strong>
